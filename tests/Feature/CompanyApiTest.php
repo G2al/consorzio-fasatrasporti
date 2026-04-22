@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\UploadedDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -201,5 +202,39 @@ class CompanyApiTest extends TestCase
         $this->assertSame(2, AuditLog::query()
             ->whereIn('action', ['company.profile_updated', 'company.password_updated'])
             ->count());
+    }
+
+    public function test_company_registration_sends_telegram_notification_when_enabled(): void
+    {
+        $this->seed();
+
+        config([
+            'services.telegram.bot_token' => 'test-token',
+            'services.telegram.registration_chat_id' => '-5262387162',
+            'services.telegram.registration_enabled' => true,
+            'services.telegram.allow_during_tests' => true,
+        ]);
+
+        Http::fake([
+            'api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $this->postJson('/api/register', [
+            'name' => 'Telegram Trasporti SRL',
+            'responsible_name' => 'Giovanni Verdi',
+            'vat_number' => '55566677788',
+            'email' => 'telegram@example.com',
+            'password' => 'Password1',
+            'password_confirmation' => 'Password1',
+        ])->assertCreated();
+
+        Http::assertSent(function ($request): bool {
+            return $request->url() === 'https://api.telegram.org/bottest-token/sendMessage'
+                && $request['chat_id'] === '-5262387162'
+                && str_contains((string) $request['text'], '🟢 <b>Nuova società registrata</b>')
+                && str_contains((string) $request['text'], '🏢 <b>Società</b>')
+                && str_contains((string) $request['text'], 'Telegram Trasporti SRL')
+                && str_contains((string) $request['text'], 'telegram@example.com');
+        });
     }
 }

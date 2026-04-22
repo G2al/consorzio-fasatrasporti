@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'registration_chat_id' => env('TELEGRAM_REGISTRATION_CHAT_ID'),
+        'registration_enabled' => env('TELEGRAM_REGISTRATION_ENABLED', false),
+        'allow_during_tests' => env('TELEGRAM_ALLOW_DURING_TESTS', false),
+    ],
+
 ];
