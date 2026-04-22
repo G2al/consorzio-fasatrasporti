@@ -16,6 +16,7 @@ use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Html;
 use Filament\Schemas\Components\Section;
@@ -282,6 +283,12 @@ class DocumentApprovalResource extends Resource
                                 'expiry_date' => $data['expiry_date'] ?? null,
                             ]);
 
+                            Notification::make()
+                                ->title('Documento approvato')
+                                ->body($record->template->name.' e stato approvato correttamente.')
+                                ->success()
+                                ->send();
+
                             return;
                         }
 
@@ -295,6 +302,12 @@ class DocumentApprovalResource extends Resource
                             'template' => $record->template->name,
                             'notes' => $data['admin_notes'],
                         ]);
+
+                        Notification::make()
+                            ->title('Documento respinto')
+                            ->body($record->template->name.' e stato respinto correttamente.')
+                            ->danger()
+                            ->send();
                     }),
             ]);
     }
