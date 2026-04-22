@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Notifications\DocumentStatusChanged;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -85,13 +84,5 @@ class UploadedDocument extends Model
             }
         });
 
-        static::updated(function (UploadedDocument $document): void {
-            if (! $document->wasChanged('status') || ! in_array($document->status, ['approved', 'rejected'], true)) {
-                return;
-            }
-
-            $document->loadMissing(['template.section', 'documentable']);
-            $document->companyUser()?->notify(new DocumentStatusChanged($document));
-        });
     }
 }

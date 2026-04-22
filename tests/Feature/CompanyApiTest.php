@@ -2,13 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Notifications\DocumentStatusChanged;
 use App\Models\AuditLog;
 use App\Models\UploadedDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -91,13 +89,10 @@ class CompanyApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('summary.uploaded', 1);
 
-        Notification::fake();
-
         $document = UploadedDocument::query()->findOrFail($secondUploadResponse->json('document.id'));
         $document->update(['status' => 'approved', 'expiry_date' => '2030-01-01']);
 
         $this->assertNotNull($document->fresh()->approved_at);
-        Notification::assertSentTo($document->fresh()->companyUser(), DocumentStatusChanged::class);
         $this->withToken($token)
             ->getJson('/api/notifications')
             ->assertOk()
