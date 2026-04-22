@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Registrazione | Consorzio FASATrasporti</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+</head>
+<body class="auth-page" data-page="register">
+    <main class="auth-shell is-register">
+        <section class="auth-copy" aria-labelledby="register-title">
+            <div class="auth-copy-inner">
+                <img class="auth-logo" src="images/logo_white_fasa.svg" alt="FASATrasporti">
+                <p class="auth-eyebrow">Registrazione societ&agrave;</p>
+                <h1 id="register-title">Attiva il tuo accesso</h1>
+                <p>Dopo la registrazione potrai gestire documenti aziendali, dipendenti e veicoli dallo stesso portale.</p>
+                <div class="auth-feature-list" aria-label="Aree gestibili">
+                    <span>Societ&agrave;</span>
+                    <span>Dipendenti</span>
+                    <span>Veicoli</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="auth-panel auth-panel-wide" aria-label="Registrazione societ&agrave;">
+            <div class="brand">
+                <div class="brand-text">
+                    <div class="brand-title">Crea account societ&agrave;</div>
+                    <div class="brand-subtitle">Completa i dati principali per accedere al portale</div>
+                </div>
+            </div>
+
+            <div class="alert" data-alert></div>
+
+            <form data-register-form>
+                <div class="auth-form-grid">
+                    <div class="field">
+                        <label for="name">Ragione sociale</label>
+                        <input class="input" id="name" name="name" type="text" autocomplete="organization" required>
+                    </div>
+
+                    <div class="field">
+                        <label for="responsible_name">Responsabile</label>
+                        <input class="input" id="responsible_name" name="responsible_name" type="text" autocomplete="name">
+                    </div>
+
+                    <div class="field">
+                        <label for="vat_number">Partita IVA</label>
+                        <input class="input" id="vat_number" name="vat_number" type="text" inputmode="numeric" autocomplete="off">
+                    </div>
+
+                    <div class="field">
+                        <label for="email">Email</label>
+                        <input class="input" id="email" name="email" type="email" autocomplete="email" required>
+                    </div>
+                </div>
+
+                <div class="password-tools form-gap">
+                    <div class="field">
+                        <div class="field-label-row">
+                            <label for="password">Password</label>
+                            <button class="mini-action" type="button" data-generate-password>Genera password</button>
+                        </div>
+                        <div class="password-field">
+                            <input class="input" id="password" name="password" type="password" autocomplete="new-password" required data-password-input>
+                            <button class="password-toggle" type="button" data-toggle-password="password" aria-label="Mostra password" title="Mostra password">
+                                <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"/><path d="M9.9 4.2A10.7 10.7 0 0 1 12 4c6.5 0 10 8 10 8a18 18 0 0 1-3.2 4.2"/><path d="M6.6 6.6C3.6 8.6 2 12 2 12s3.5 8 10 8a10.4 10.4 0 0 0 5.4-1.5"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="password_confirmation">Conferma password</label>
+                        <div class="password-field">
+                            <input class="input" id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" required data-password-confirmation>
+                            <button class="password-toggle" type="button" data-toggle-password="password_confirmation" aria-label="Mostra password" title="Mostra password">
+                                <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"/><path d="M9.9 4.2A10.7 10.7 0 0 1 12 4c6.5 0 10 8 10 8a18 18 0 0 1-3.2 4.2"/><path d="M6.6 6.6C3.6 8.6 2 12 2 12s3.5 8 10 8a10.4 10.4 0 0 0 5.4-1.5"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="password-advisor" data-password-advisor>
+                    <div class="password-meter" aria-hidden="true"><span data-password-meter></span></div>
+                    <ul class="password-rules">
+                        <li data-password-rule="length">Almeno 8 caratteri</li>
+                        <li data-password-rule="lower">Una lettera minuscola</li>
+                        <li data-password-rule="upper">Una lettera maiuscola</li>
+                        <li data-password-rule="number">Un numero</li>
+                        <li data-password-rule="match">Le password coincidono</li>
+                    </ul>
+                </div>
+
+                <label class="check-row form-gap">
+                    <input type="checkbox" name="remember" checked>
+                    <span>Ricordami su questo dispositivo</span>
+                </label>
+
+                <button class="btn auth-submit" type="submit" data-loading-text="Creazione account...">
+                    <span class="btn-content">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                        Crea account
+                    </span>
+                    <span class="btn-loader" aria-hidden="true"></span>
+                </button>
+            </form>
+
+            <div class="link-row">
+                <span>Account esistente</span>
+                <a href="login.html">Accedi</a>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

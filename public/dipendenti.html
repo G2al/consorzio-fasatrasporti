@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dipendenti | Consorzio FASATrasporti</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+</head>
+<body data-page="employees">
+    <main class="page">
+        <header class="topbar">
+            <div>
+                <h1>Dipendenti</h1>
+                <p data-company-name></p>
+            </div>
+            <div class="topbar-actions">
+                <div class="notification-wrapper" data-notifications>
+                    <button class="icon-btn notification-button" type="button" data-open-notifications title="Notifiche" aria-label="Apri notifiche" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/></svg>
+                        <span class="notification-count" data-notification-count hidden></span>
+                    </button>
+                    <div class="notification-panel" data-notification-panel aria-hidden="true">
+                        <div class="notification-panel-head">
+                            <strong>Notifiche</strong>
+                            <button class="mini-action" type="button" data-refresh-notifications>Aggiorna</button>
+                        </div>
+                        <div class="notification-list" data-notification-list></div>
+                    </div>
+                </div>
+                <button class="icon-btn" type="button" data-open-profile title="Profilo societ&agrave;" aria-label="Apri profilo societ&agrave;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+                </button>
+                <button class="btn secondary" type="button" data-logout data-loading-text="Uscita...">
+                    <span class="btn-content">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+                        Esci
+                    </span>
+                    <span class="btn-loader" aria-hidden="true"></span>
+                </button>
+            </div>
+        </header>
+
+        <div class="alert" data-alert></div>
+
+        <form class="inline-form" data-employee-form>
+            <div class="field">
+                <label for="first_name">Nome</label>
+                <input class="input" id="first_name" name="first_name" type="text" required>
+            </div>
+            <div class="field">
+                <label for="last_name">Cognome</label>
+                <input class="input" id="last_name" name="last_name" type="text" required>
+            </div>
+            <div class="field">
+                <label for="tax_code">Codice fiscale</label>
+                <input class="input" id="tax_code" name="tax_code" type="text" required>
+            </div>
+            <button class="btn" type="submit">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                Aggiungi
+            </button>
+        </form>
+
+        <div class="list-toolbar">
+            <div class="field">
+                <label for="employee_search">Cerca dipendente</label>
+                <input class="input" id="employee_search" type="search" placeholder="Nome o cognome" data-employee-search>
+            </div>
+        </div>
+
+        <div class="entity-list" data-employees></div>
+    </main>
+
+    <div class="modal-backdrop" data-modal>
+        <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <header class="modal-head">
+                <div>
+                    <h2 id="modal-title" data-modal-title></h2>
+                    <p class="meta" data-modal-subtitle></p>
+                </div>
+                <button class="close-btn" type="button" data-close-modal aria-label="Chiudi">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+            </header>
+            <div class="modal-body">
+                <div class="modal-content" data-modal-body></div>
+            </div>
+        </section>
+    </div>
+
+    <nav class="bottom-nav" aria-label="Navigazione principale">
+        <a href="index.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9h.01"/><path d="M9 13h.01"/><path d="M9 17h.01"/></svg>
+            Societ&agrave;
+        </a>
+        <a class="is-active" href="dipendenti.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Dipendenti
+        </a>
+        <a href="veicoli.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M14 17h1"/><path d="M14 9h4l4 4v4h-3"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+            Veicoli
+        </a>
+    </nav>
+</body>
+</html>
