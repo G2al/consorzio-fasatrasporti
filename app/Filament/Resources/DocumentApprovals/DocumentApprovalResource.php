@@ -10,12 +10,16 @@ use App\Models\User;
 use App\Models\Vehicle;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Html;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -94,10 +98,12 @@ class DocumentApprovalResource extends Resource
                     }),
                 TextColumn::make('expiry_date')
                     ->label('Scadenza')
-                    ->date('d/m/Y'),
+                    ->date('d/m/Y')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('approved_at')
                     ->label('Approvato il')
-                    ->dateTime('d/m/Y H:i'),
+                    ->dateTime('d/m/Y H:i')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
                     ->label('Caricato')
                     ->dateTime('d/m/Y H:i')
@@ -173,55 +179,112 @@ class DocumentApprovalResource extends Resource
                         ->when($data['expires_until'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('expiry_date', '<=', $date))),
             ])
             ->recordActions([
-                Action::make('open_file')
-                    ->label('Apri')
-                    ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
-                    ->url(fn (UploadedDocument $record): string => $record->file_url)
-                    ->openUrlInNewTab(),
-                EditAction::make()
-                    ->label('Modifica'),
-                Action::make('history')
-                    ->label('Storico')
-                    ->icon(Heroicon::OutlinedClock)
-                    ->modalHeading('Storico documento')
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('Chiudi')
-                    ->modalContent(fn (UploadedDocument $record): HtmlString => static::historyContent($record)),
-                Action::make('approve')
-                    ->label('Approva')
-                    ->color('success')
-                    ->icon(Heroicon::OutlinedCheckCircle)
+                Action::make('review')
+                    ->label('Revisiona')
+                    ->tooltip('Revisiona documento')
+                    ->icon(Heroicon::OutlinedEye)
+                    ->iconButton()
+                    ->color('primary')
+                    ->modalHeading(fn (UploadedDocument $record): string => 'Revisione: '.$record->template->name)
+                    ->modalDescription(fn (UploadedDocument $record): string => static::documentableLabel($record))
+                    ->modalWidth('7xl')
+                    ->modalSubmitActionLabel('Salva decisione')
+                    ->modalCancelActionLabel('Chiudi senza modifiche')
                     ->form([
-                        DatePicker::make('expiry_date')
-                            ->label('Scadenza')
-                            ->helperText('Opzionale. Lascia vuoto se il documento non scade.'),
+                        Section::make('Dati documento')
+                            ->schema([
+                                TextInput::make('review_section')
+                                    ->label('Sezione')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                TextInput::make('review_template')
+                                    ->label('Documento')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                TextInput::make('review_owner')
+                                    ->label('Societa / elemento')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                TextInput::make('review_status')
+                                    ->label('Stato attuale')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                TextInput::make('review_uploaded_at')
+                                    ->label('Caricato il')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                TextInput::make('review_file_name')
+                                    ->label('Nome file')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->columnSpan(3),
+                            ])
+                            ->columns(4),
+                        Section::make('File caricato')
+                            ->description('Apri o controlla il documento prima di salvare la decisione.')
+                            ->schema([
+                                Html::make(fn (UploadedDocument $record): HtmlString => static::filePreviewContent($record))
+                                    ->columnSpanFull(),
+                            ]),
+                        Section::make('Decisione')
+                            ->schema([
+                                Radio::make('decision')
+                                    ->label('Esito revisione')
+                                    ->options([
+                                        'approve' => 'Approva documento',
+                                        'reject' => 'Respingi documento',
+                                    ])
+                                    ->default('approve')
+                                    ->inline()
+                                    ->live()
+                                    ->required()
+                                    ->columnSpanFull(),
+                                DatePicker::make('expiry_date')
+                                    ->label('Scadenza')
+                                    ->helperText('Opzionale. Lascia vuoto se il documento non scade.')
+                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve'),
+                                Textarea::make('admin_notes')
+                                    ->label('Note di rifiuto')
+                                    ->helperText('Obbligatorie se respingi il documento. Saranno visibili alla societa.')
+                                    ->rows(4)
+                                    ->required(fn (Get $get): bool => $get('decision') === 'reject')
+                                    ->visible(fn (Get $get): bool => $get('decision') === 'reject')
+                                    ->columnSpanFull(),
+                            ])
+                            ->columns(2),
                     ])
                     ->fillForm(fn (UploadedDocument $record): array => [
+                        'decision' => $record->status === 'rejected' ? 'reject' : 'approve',
                         'expiry_date' => $record->expiry_date,
+                        'admin_notes' => $record->admin_notes,
+                        'review_section' => $record->template->section?->name,
+                        'review_template' => $record->template->name,
+                        'review_owner' => static::documentableLabel($record),
+                        'review_status' => match ($record->status) {
+                            'approved' => 'Approvato',
+                            'rejected' => 'Respinto',
+                            default => 'In attesa',
+                        },
+                        'review_uploaded_at' => $record->created_at?->format('d/m/Y H:i'),
+                        'review_file_name' => basename($record->file_path),
                     ])
                     ->action(function (UploadedDocument $record, array $data): void {
-                        $record->update([
-                            'status' => 'approved',
-                            'expiry_date' => $data['expiry_date'] ?? null,
-                            'approved_at' => now(),
-                            'admin_notes' => null,
-                        ]);
+                        if (($data['decision'] ?? null) === 'approve') {
+                            $record->update([
+                                'status' => 'approved',
+                                'expiry_date' => $data['expiry_date'] ?? null,
+                                'approved_at' => now(),
+                                'admin_notes' => null,
+                            ]);
 
-                        AuditLog::record('document.approved', $record->fresh(['template', 'documentable']), 'Documento approvato', [
-                            'template' => $record->template->name,
-                            'expiry_date' => $data['expiry_date'] ?? null,
-                        ]);
-                    }),
-                Action::make('reject')
-                    ->label('Respingi')
-                    ->color('danger')
-                    ->icon(Heroicon::OutlinedArchiveBoxXMark)
-                    ->form([
-                        Textarea::make('admin_notes')
-                            ->label('Note di rifiuto')
-                            ->required(),
-                    ])
-                    ->action(function (UploadedDocument $record, array $data): void {
+                            AuditLog::record('document.approved', $record->fresh(['template', 'documentable']), 'Documento approvato', [
+                                'template' => $record->template->name,
+                                'expiry_date' => $data['expiry_date'] ?? null,
+                            ]);
+
+                            return;
+                        }
+
                         $record->update([
                             'status' => 'rejected',
                             'approved_at' => null,
@@ -294,6 +357,44 @@ class DocumentApprovalResource extends Resource
                     <h3 class="text-sm font-semibold">Attivita collegate</h3>
                     <ul class="mt-2 space-y-2">'.($logRows ?: '<li class="text-sm text-gray-600">Nessuna attivita registrata.</li>').'</ul>
                 </div>
+            </div>
+        ');
+    }
+
+    protected static function filePreviewContent(UploadedDocument $record): HtmlString
+    {
+        $fileUrl = e($record->file_url);
+        $fileName = e(basename($record->file_path));
+        $extension = strtolower(pathinfo($record->file_path, PATHINFO_EXTENSION));
+
+        $preview = match (true) {
+            in_array($extension, ['jpg', 'jpeg', 'png', 'webp'], true) => '
+                <div style="overflow:hidden;border:1px solid rgba(148,163,184,.35);border-radius:12px;background:#111827;">
+                    <img src="'.$fileUrl.'" alt="Anteprima documento" style="display:block;width:100%;max-height:68vh;object-fit:contain;background:#111827;">
+                </div>',
+            $extension === 'pdf' => '
+                <iframe src="'.$fileUrl.'" title="Anteprima documento" style="display:block;width:100%;height:68vh;border:1px solid rgba(148,163,184,.35);border-radius:12px;background:#fff;"></iframe>',
+            default => '
+                <div style="min-height:260px;display:grid;place-items:center;border:1px dashed rgba(148,163,184,.55);border-radius:12px;background:rgba(148,163,184,.08);padding:28px;text-align:center;">
+                    <div style="max-width:420px;">
+                        <p style="margin:0;font-size:14px;font-weight:700;">Anteprima non disponibile per questo formato.</p>
+                        <p style="margin:6px 0 0;font-size:13px;color:#64748b;">Apri il file in una nuova scheda per revisionarlo.</p>
+                    </div>
+                </div>',
+        };
+
+        return new HtmlString('
+            <div style="display:grid;gap:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px solid rgba(148,163,184,.25);border-radius:12px;background:rgba(148,163,184,.08);">
+                    <div>
+                        <p style="margin:0;font-size:13px;font-weight:700;">'.$fileName.'</p>
+                        <p style="margin:3px 0 0;font-size:12px;color:#64748b;">Formato: '.e(strtoupper($extension ?: 'file')).'</p>
+                    </div>
+                    <a href="'.$fileUrl.'" target="_blank" rel="noreferrer" style="font-size:13px;font-weight:700;color:#0f766e;text-decoration:none;">
+                        Apri in nuova scheda
+                    </a>
+                </div>
+                '.$preview.'
             </div>
         ');
     }

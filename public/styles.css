@@ -1780,21 +1780,12 @@ select {
     }
 
     .auth-copy {
-        min-height: 260px;
+        display: none;
     }
 
     .auth-panel {
         min-height: auto;
-    }
-
-    .auth-logo {
-        width: min(220px, 82%);
-        margin-bottom: 8px;
-    }
-
-    .auth-copy h1 {
-        max-width: none;
-        font-size: 34px;
+        width: 100%;
     }
 
     .topbar,
