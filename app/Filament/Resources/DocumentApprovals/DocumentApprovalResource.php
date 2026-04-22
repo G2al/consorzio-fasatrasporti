@@ -28,6 +28,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\HtmlString;
 
 class DocumentApprovalResource extends Resource
@@ -70,6 +71,18 @@ class DocumentApprovalResource extends Resource
             ]);
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->with([
+                'template.section',
+                'documentable' => fn (MorphTo $morphTo): MorphTo => $morphTo->morphWith([
+                    Employee::class => ['user'],
+                    Vehicle::class => ['user'],
+                ]),
+            ]);
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -81,9 +94,10 @@ class DocumentApprovalResource extends Resource
                 TextColumn::make('template.name')
                     ->label('Documento')
                     ->searchable(),
-                TextColumn::make('documentable.name')
+                TextColumn::make('company_display')
                     ->label('Società / elemento')
-                    ->formatStateUsing(fn (UploadedDocument $record): string => static::documentableLabel($record)),
+                    ->state(fn (UploadedDocument $record): string => static::companyLabel($record))
+                    ->description(fn (UploadedDocument $record): ?string => static::elementDescription($record)),
                 TextColumn::make('status')
                     ->label('Stato')
                     ->badge()
@@ -321,6 +335,22 @@ class DocumentApprovalResource extends Resource
             $documentable instanceof \App\Models\Employee => trim("{$documentable->first_name} {$documentable->last_name}"),
             $documentable instanceof \App\Models\Vehicle => "{$documentable->brand_model} ({$documentable->plate})",
             default => 'Elemento eliminato',
+        };
+    }
+
+    protected static function companyLabel(UploadedDocument $record): string
+    {
+        return $record->companyUser()?->name ?? 'Societa non disponibile';
+    }
+
+    protected static function elementDescription(UploadedDocument $record): ?string
+    {
+        $documentable = $record->documentable;
+
+        return match (true) {
+            $documentable instanceof \App\Models\Employee => 'Dipendente: '.trim("{$documentable->first_name} {$documentable->last_name}"),
+            $documentable instanceof \App\Models\Vehicle => 'Veicolo: '.$documentable->brand_model.' ('.$documentable->plate.')',
+            default => null,
         };
     }
 

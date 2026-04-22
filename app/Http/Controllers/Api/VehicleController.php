@@ -17,7 +17,7 @@ class VehicleController extends Controller
 
         $vehicles = Vehicle::query()
             ->where('user_id', $request->user()->id)
-            ->withCount('documents')
+            ->withCount($this->documentStatusCounts())
             ->orderBy('plate')
             ->get()
             ->map(fn (Vehicle $vehicle): array => $this->payload($vehicle, $requiredDocumentsCount));
@@ -38,7 +38,7 @@ class VehicleController extends Controller
         AuditLog::record('vehicle.created', $vehicle, 'Veicolo creato', actor: $request->user());
 
         return response()->json([
-            'vehicle' => $this->payload($vehicle->loadCount('documents'), $this->requiredDocumentsCount()),
+            'vehicle' => $this->payload($vehicle->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
         ], 201);
     }
 
@@ -55,7 +55,7 @@ class VehicleController extends Controller
         AuditLog::record('vehicle.updated', $vehicle, 'Veicolo aggiornato', actor: $request->user());
 
         return response()->json([
-            'vehicle' => $this->payload($vehicle->loadCount('documents'), $this->requiredDocumentsCount()),
+            'vehicle' => $this->payload($vehicle->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
         ]);
     }
 
@@ -86,7 +86,20 @@ class VehicleController extends Controller
             'brand_model' => $vehicle->brand_model,
             'plate' => $vehicle->plate,
             'documents_count' => $vehicle->documents_count ?? $vehicle->documents()->count(),
+            'approved_documents_count' => $vehicle->approved_documents_count ?? $vehicle->documents()->where('status', 'approved')->count(),
+            'pending_documents_count' => $vehicle->pending_documents_count ?? $vehicle->documents()->where('status', 'pending')->count(),
+            'rejected_documents_count' => $vehicle->rejected_documents_count ?? $vehicle->documents()->where('status', 'rejected')->count(),
             'required_documents_count' => $requiredDocumentsCount ?? $this->requiredDocumentsCount(),
+        ];
+    }
+
+    private function documentStatusCounts(): array
+    {
+        return [
+            'documents',
+            'documents as approved_documents_count' => fn ($query) => $query->where('status', 'approved'),
+            'documents as pending_documents_count' => fn ($query) => $query->where('status', 'pending'),
+            'documents as rejected_documents_count' => fn ($query) => $query->where('status', 'rejected'),
         ];
     }
 

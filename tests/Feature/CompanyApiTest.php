@@ -87,12 +87,26 @@ class CompanyApiTest extends TestCase
         $this->withToken($token)
             ->getJson('/api/dashboard')
             ->assertOk()
-            ->assertJsonPath('summary.uploaded', 1);
+            ->assertJsonPath('summary.uploaded', 0);
+
+        $this->withToken($token)
+            ->getJson('/api/employees')
+            ->assertOk()
+            ->assertJsonPath('employees.0.documents_count', 1)
+            ->assertJsonPath('employees.0.approved_documents_count', 0)
+            ->assertJsonPath('employees.0.pending_documents_count', 1);
 
         $document = UploadedDocument::query()->findOrFail($secondUploadResponse->json('document.id'));
         $document->update(['status' => 'approved', 'expiry_date' => '2030-01-01']);
 
         $this->assertNotNull($document->fresh()->approved_at);
+        $this->withToken($token)
+            ->getJson('/api/employees')
+            ->assertOk()
+            ->assertJsonPath('employees.0.documents_count', 1)
+            ->assertJsonPath('employees.0.approved_documents_count', 1)
+            ->assertJsonPath('employees.0.pending_documents_count', 0);
+
         $notificationsResponse = $this->withToken($token)
             ->getJson('/api/notifications')
             ->assertOk()

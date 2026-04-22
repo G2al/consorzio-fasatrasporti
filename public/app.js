@@ -326,12 +326,13 @@
 
     function progressStatus(entity) {
         const progress = documentsProgress(entity);
+        const approved = Number(entity.approved_documents_count || 0);
 
-        if (!progress.loaded) {
+        if (!progress.total || progress.loaded < progress.total) {
             return 'missing';
         }
 
-        if (progress.total && progress.loaded >= progress.total) {
+        if (approved >= progress.total) {
             return 'approved';
         }
 
@@ -1605,6 +1606,9 @@
         }
 
         const loaded = documents.filter((item) => item.uploaded_document).length;
+        const approved = documents.filter((item) => item.status === 'approved').length;
+        const pending = documents.filter((item) => item.status === 'pending').length;
+        const rejected = documents.filter((item) => item.status === 'rejected').length;
         const total = documents.length;
         const collectionKey = type === 'employee' ? 'employees' : 'vehicles';
         let updatedEntity = null;
@@ -1617,6 +1621,9 @@
             updatedEntity = {
                 ...entity,
                 documents_count: loaded,
+                approved_documents_count: approved,
+                pending_documents_count: pending,
+                rejected_documents_count: rejected,
                 required_documents_count: total,
             };
 

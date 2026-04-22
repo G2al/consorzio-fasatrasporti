@@ -17,7 +17,7 @@ class EmployeeController extends Controller
 
         $employees = Employee::query()
             ->where('user_id', $request->user()->id)
-            ->withCount('documents')
+            ->withCount($this->documentStatusCounts())
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get()
@@ -40,7 +40,7 @@ class EmployeeController extends Controller
         AuditLog::record('employee.created', $employee, 'Dipendente creato', actor: $request->user());
 
         return response()->json([
-            'employee' => $this->payload($employee->loadCount('documents'), $this->requiredDocumentsCount()),
+            'employee' => $this->payload($employee->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
         ], 201);
     }
 
@@ -58,7 +58,7 @@ class EmployeeController extends Controller
         AuditLog::record('employee.updated', $employee, 'Dipendente aggiornato', actor: $request->user());
 
         return response()->json([
-            'employee' => $this->payload($employee->loadCount('documents'), $this->requiredDocumentsCount()),
+            'employee' => $this->payload($employee->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
         ]);
     }
 
@@ -89,7 +89,20 @@ class EmployeeController extends Controller
             'last_name' => $employee->last_name,
             'tax_code' => $employee->tax_code,
             'documents_count' => $employee->documents_count ?? $employee->documents()->count(),
+            'approved_documents_count' => $employee->approved_documents_count ?? $employee->documents()->where('status', 'approved')->count(),
+            'pending_documents_count' => $employee->pending_documents_count ?? $employee->documents()->where('status', 'pending')->count(),
+            'rejected_documents_count' => $employee->rejected_documents_count ?? $employee->documents()->where('status', 'rejected')->count(),
             'required_documents_count' => $requiredDocumentsCount ?? $this->requiredDocumentsCount(),
+        ];
+    }
+
+    private function documentStatusCounts(): array
+    {
+        return [
+            'documents',
+            'documents as approved_documents_count' => fn ($query) => $query->where('status', 'approved'),
+            'documents as pending_documents_count' => fn ($query) => $query->where('status', 'pending'),
+            'documents as rejected_documents_count' => fn ($query) => $query->where('status', 'rejected'),
         ];
     }
 

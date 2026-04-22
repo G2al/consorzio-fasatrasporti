@@ -43,19 +43,16 @@ class CompanyDataController extends Controller
         /** @var User $company */
         $company = $request->user();
 
-        $templateCounts = Section::query()
-            ->withCount('documentTemplates')
-            ->get()
-            ->pluck('document_templates_count', 'slug');
-
         $employeeCount = $company->employees()->count();
         $vehicleCount = $company->vehicles()->count();
-        $requiredCount = (int) ($templateCounts->get('societa', 0)
-            + ($employeeCount * $templateCounts->get('dipendenti', 0))
-            + ($vehicleCount * $templateCounts->get('veicoli', 0)));
+        $requiredCount = Section::query()
+            ->where('slug', 'societa')
+            ->withCount('documentTemplates')
+            ->value('document_templates_count') ?? 0;
 
-        $documents = $this->companyDocumentsQuery($company)
+        $documents = $company->documents()
             ->with(['template.section', 'documentable'])
+            ->whereHas('template.section', fn ($query) => $query->where('slug', 'societa'))
             ->get();
 
         $approved = $documents->where('status', 'approved')->count();
