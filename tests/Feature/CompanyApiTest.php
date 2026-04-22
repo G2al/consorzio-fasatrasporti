@@ -110,7 +110,7 @@ class CompanyApiTest extends TestCase
         $notificationsResponse = $this->withToken($token)
             ->getJson('/api/notifications')
             ->assertOk()
-            ->assertJsonPath('unread_count', 0)
+            ->assertJsonPath('unread_count', 1)
             ->assertJsonPath('notifications.0.type', 'approved');
 
         $notificationId = $notificationsResponse->json('notifications.0.id');

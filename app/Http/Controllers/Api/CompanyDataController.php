@@ -109,7 +109,7 @@ class CompanyDataController extends Controller
             });
 
         return response()->json([
-            'unread_count' => $notifications->where('is_urgent', true)->count(),
+            'unread_count' => $notifications->count(),
             'notifications' => $notifications,
         ]);
     }
