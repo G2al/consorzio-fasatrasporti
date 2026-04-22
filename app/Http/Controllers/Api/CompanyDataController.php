@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CompanyNotificationDismissal;
 use App\Models\Employee;
 use App\Models\Section;
 use App\Models\UploadedDocument;
@@ -10,6 +11,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class CompanyDataController extends Controller
 {
@@ -101,6 +103,68 @@ class CompanyDataController extends Controller
     {
         /** @var User $company */
         $company = $request->user();
+
+        $notifications = $this->visibleNotifications($company)
+            ->map(function (array $item): array {
+                unset($item['priority'], $item['sort_date']);
+
+                return $item;
+            });
+
+        return response()->json([
+            'unread_count' => $notifications->where('is_urgent', true)->count(),
+            'notifications' => $notifications,
+        ]);
+    }
+
+    public function dismissNotification(Request $request, string $notification): JsonResponse
+    {
+        /** @var User $company */
+        $company = $request->user();
+
+        abort_if(strlen($notification) > 190, 422, 'Notifica non valida.');
+
+        CompanyNotificationDismissal::query()->firstOrCreate([
+            'user_id' => $company->id,
+            'notification_key' => $notification,
+        ]);
+
+        return response()->json([
+            'message' => 'Notifica eliminata.',
+        ]);
+    }
+
+    public function dismissAllNotifications(Request $request): JsonResponse
+    {
+        /** @var User $company */
+        $company = $request->user();
+
+        $now = now();
+        $rows = $this->visibleNotifications($company)
+            ->map(fn (array $notification): array => [
+                'user_id' => $company->id,
+                'notification_key' => $notification['id'],
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])
+            ->all();
+
+        if ($rows !== []) {
+            CompanyNotificationDismissal::query()->upsert(
+                $rows,
+                ['user_id', 'notification_key'],
+                ['updated_at'],
+            );
+        }
+
+        return response()->json([
+            'message' => 'Notifiche eliminate.',
+            'dismissed_count' => count($rows),
+        ]);
+    }
+
+    private function buildNotifications(User $company): Collection
+    {
         $today = now()->startOfDay();
         $expiryLimit = now()->addDays(30)->endOfDay();
 
@@ -164,22 +228,24 @@ class CompanyDataController extends Controller
                 false,
             ));
 
-        $notifications = $rejected
+        return $rejected
             ->concat($expiring)
             ->concat($approved)
             ->sortByDesc(fn (array $item): string => sprintf('%02d-%s', $item['priority'], $item['sort_date'] ?? ''))
             ->take(12)
-            ->values()
-            ->map(function (array $item): array {
-                unset($item['priority'], $item['sort_date']);
+            ->values();
+    }
 
-                return $item;
-            });
+    private function visibleNotifications(User $company): Collection
+    {
+        $dismissed = $company->notificationDismissals()
+            ->pluck('notification_key')
+            ->all();
 
-        return response()->json([
-            'unread_count' => $notifications->where('is_urgent', true)->count(),
-            'notifications' => $notifications,
-        ]);
+        return $this->buildNotifications($company)
+            ->reject(fn (array $item): bool => in_array($item['id'], $dismissed, true))
+            ->take(12)
+            ->values();
     }
 
     private function companyDocumentsQuery(User $company)
@@ -231,8 +297,10 @@ class CompanyDataController extends Controller
         int $priority,
         bool $isUrgent,
     ): array {
+        $versionKey = substr(sha1($date.'|'.$body.'|'.$document->updated_at?->toIso8601String()), 0, 12);
+
         return [
-            'id' => $type.'-'.$document->id,
+            'id' => $type.'-'.$document->id.'-'.$versionKey,
             'type' => $type,
             'title' => $title,
             'subtitle' => $subtitle,

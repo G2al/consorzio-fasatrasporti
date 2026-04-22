@@ -63,6 +63,11 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(AuditLog::class, 'company_id');
     }
 
+    public function notificationDismissals(): HasMany
+    {
+        return $this->hasMany(CompanyNotificationDismissal::class);
+    }
+
     public function uploadedDocuments(): MorphMany
     {
         return $this->documents();

@@ -19,6 +19,8 @@ Route::middleware('auth:company_api')->group(function () {
 
     Route::get('/dashboard', [CompanyDataController::class, 'dashboard']);
     Route::get('/notifications', [CompanyDataController::class, 'notifications']);
+    Route::delete('/notifications', [CompanyDataController::class, 'dismissAllNotifications']);
+    Route::delete('/notifications/{notification}', [CompanyDataController::class, 'dismissNotification']);
     Route::get('/sections', [CompanyDataController::class, 'sections']);
     Route::get('/company/documents', [DocumentController::class, 'companyDocuments']);
 

@@ -337,6 +337,12 @@ select {
     border-bottom: 1px solid var(--line);
 }
 
+.notification-panel-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
 .notification-list {
     display: grid;
     max-height: 380px;
@@ -345,12 +351,13 @@ select {
 
 .notification-item {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 11px;
-    padding: 12px 14px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 10px 10px 14px;
     color: inherit;
-    text-decoration: none;
     transition:
+        opacity 160ms var(--ease),
         background 160ms var(--ease),
         transform 160ms var(--ease);
 }
@@ -358,6 +365,21 @@ select {
 .notification-item:hover,
 .notification-item:focus-visible {
     background: var(--surface-soft);
+}
+
+.notification-item.is-removing {
+    opacity: 0.45;
+    pointer-events: none;
+    transform: translateX(6px);
+}
+
+.notification-link {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 11px;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
 }
 
 .notification-mark {
@@ -402,7 +424,7 @@ select {
 }
 
 .notification-copy strong {
-    color: var(--text);
+    color: var(--ink);
     font-size: 14px;
     font-weight: 650;
 }
@@ -416,6 +438,38 @@ select {
 
 .notification-empty {
     padding: 16px;
+}
+
+.notification-dismiss {
+    position: relative;
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition:
+        color 160ms var(--ease),
+        background 160ms var(--ease),
+        border-color 160ms var(--ease),
+        transform 160ms var(--ease);
+}
+
+.notification-dismiss:hover,
+.notification-dismiss:focus-visible {
+    border-color: rgba(180, 35, 24, 0.18);
+    background: #fff0f0;
+    color: var(--danger);
+    transform: scale(1.04);
+}
+
+.notification-dismiss svg {
+    width: 15px;
+    height: 15px;
 }
 
 .section-head {
@@ -1084,6 +1138,18 @@ select {
 
 .mini-action:active {
     transform: translateY(0) scale(0.98);
+}
+
+.mini-action.danger {
+    border-color: rgba(180, 35, 24, 0.18);
+    background: #fff4f2;
+    color: var(--danger);
+}
+
+.mini-action.danger:hover,
+.mini-action.danger:focus-visible {
+    border-color: rgba(180, 35, 24, 0.32);
+    background: #ffffff;
 }
 
 .password-advisor {

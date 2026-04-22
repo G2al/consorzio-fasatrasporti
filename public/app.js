@@ -237,7 +237,7 @@
 
     function bindButtonAnimations() {
         document.addEventListener('click', (event) => {
-            const target = event.target.closest('.btn, .icon-btn, .entity-card, .summary-card, .close-btn, .bottom-nav a, .password-toggle, .mini-action, .link-row a, .filter-chip, .modal-tab');
+            const target = event.target.closest('.btn, .icon-btn, .entity-card, .summary-card, .close-btn, .bottom-nav a, .password-toggle, .mini-action, .link-row a, .filter-chip, .modal-tab, .notification-dismiss');
 
             if (!target || target.classList.contains('is-loading')) {
                 return;
@@ -1194,6 +1194,7 @@
             const toggle = qs('[data-open-notifications]', wrapper);
             const panel = qs('[data-notification-panel]', wrapper);
             const refresh = qs('[data-refresh-notifications]', wrapper);
+            const clear = qs('[data-clear-notifications]', wrapper);
 
             if (!toggle || !panel) {
                 return;
@@ -1215,6 +1216,19 @@
             });
 
             refresh?.addEventListener('click', () => refreshNotifications());
+            clear?.addEventListener('click', async () => {
+                setButtonLoading(clear, true, 'Pulizia...');
+
+                try {
+                    await api('/notifications', { method: 'DELETE' });
+                    renderNotifications({ unread_count: 0, notifications: [] });
+                    showToast('Notifiche eliminate.', 'success');
+                } catch (error) {
+                    showToast(error.message, 'error');
+                } finally {
+                    setButtonLoading(clear, false);
+                }
+            });
 
             document.addEventListener('click', (event) => {
                 if (!wrapper.contains(event.target)) {
@@ -1267,16 +1281,46 @@
             }
 
             list.innerHTML = notifications.map((notification) => `
-                <a class="notification-item ${escapeHtml(notification.type)}" href="${escapeHtml(notification.target || 'index.html')}">
-                    <span class="notification-mark" aria-hidden="true">${notificationIcon(notification.type)}</span>
-                    <span class="notification-copy">
-                        <strong>${escapeHtml(notification.title)}</strong>
-                        <span>${escapeHtml(notification.subtitle)}</span>
-                        <small>${escapeHtml(notification.body || '')}${notification.date ? ` &middot; ${escapeHtml(formatDate(notification.date, notification.date.includes('T')) || notification.date)}` : ''}</small>
-                    </span>
-                </a>
+                <article class="notification-item ${escapeHtml(notification.type)}" data-notification-id="${escapeHtml(notification.id)}">
+                    <a class="notification-link" href="${escapeHtml(notification.target || 'index.html')}">
+                        <span class="notification-mark" aria-hidden="true">${notificationIcon(notification.type)}</span>
+                        <span class="notification-copy">
+                            <strong>${escapeHtml(notification.title)}</strong>
+                            <span>${escapeHtml(notification.subtitle)}</span>
+                            <small>${escapeHtml(notification.body || '')}${notification.date ? ` &middot; ${escapeHtml(formatDate(notification.date, notification.date.includes('T')) || notification.date)}` : ''}</small>
+                        </span>
+                    </a>
+                    <button class="notification-dismiss" type="button" data-dismiss-notification="${escapeHtml(notification.id)}" title="Elimina notifica" aria-label="Elimina notifica">
+                        ${svg('x')}
+                    </button>
+                </article>
             `).join('');
+
+            qsa('[data-dismiss-notification]', list).forEach((button) => {
+                button.addEventListener('click', () => dismissNotification(button));
+            });
         });
+    }
+
+    async function dismissNotification(button) {
+        const notificationId = button.dataset.dismissNotification;
+        const item = button.closest('[data-notification-id]');
+
+        if (!notificationId) {
+            return;
+        }
+
+        button.disabled = true;
+        item?.classList.add('is-removing');
+
+        try {
+            await api(`/notifications/${encodeURIComponent(notificationId)}`, { method: 'DELETE' });
+            await refreshNotifications();
+        } catch (error) {
+            item?.classList.remove('is-removing');
+            button.disabled = false;
+            showToast(error.message, 'error');
+        }
     }
 
     function notificationIcon(type) {

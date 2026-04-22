@@ -93,11 +93,26 @@ class CompanyApiTest extends TestCase
         $document->update(['status' => 'approved', 'expiry_date' => '2030-01-01']);
 
         $this->assertNotNull($document->fresh()->approved_at);
-        $this->withToken($token)
+        $notificationsResponse = $this->withToken($token)
             ->getJson('/api/notifications')
             ->assertOk()
             ->assertJsonPath('unread_count', 0)
             ->assertJsonPath('notifications.0.type', 'approved');
+
+        $notificationId = $notificationsResponse->json('notifications.0.id');
+
+        $this->withToken($token)
+            ->deleteJson("/api/notifications/{$notificationId}")
+            ->assertOk();
+
+        $this->withToken($token)
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->assertJsonCount(0, 'notifications');
+
+        $this->assertDatabaseHas('company_notification_dismissals', [
+            'notification_key' => $notificationId,
+        ]);
 
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'document.uploaded',
