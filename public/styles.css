@@ -315,6 +315,10 @@ select {
     pointer-events: none;
 }
 
+.notification-count[hidden] {
+    display: none;
+}
+
 .notification-panel {
     position: absolute;
     top: calc(100% + 10px);
