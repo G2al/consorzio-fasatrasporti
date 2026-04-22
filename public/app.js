@@ -237,7 +237,7 @@
 
     function bindButtonAnimations() {
         document.addEventListener('click', (event) => {
-            const target = event.target.closest('.btn, .icon-btn, .entity-card, .close-btn, .bottom-nav a, .password-toggle, .mini-action, .link-row a, .filter-chip, .modal-tab');
+            const target = event.target.closest('.btn, .icon-btn, .entity-card, .summary-card, .close-btn, .bottom-nav a, .password-toggle, .mini-action, .link-row a, .filter-chip, .modal-tab');
 
             if (!target || target.classList.contains('is-loading')) {
                 return;
@@ -995,15 +995,25 @@
     function bindDashboardFilters() {
         qsa('[data-document-filter]').forEach((button) => {
             button.addEventListener('click', () => {
-                appState.documentFilter = button.dataset.documentFilter || 'all';
-
-                qsa('[data-document-filter]').forEach((item) => {
-                    item.classList.toggle('is-active', item === button);
-                });
-
-                renderCompanyDocuments();
+                setDocumentFilter(button.dataset.documentFilter || 'all');
             });
         });
+    }
+
+    function setDocumentFilter(filter) {
+        appState.documentFilter = filter;
+
+        qsa('[data-document-filter]').forEach((item) => {
+            item.classList.toggle('is-active', item.dataset.documentFilter === filter);
+        });
+
+        qsa('[data-summary-filter]').forEach((item) => {
+            const isActive = item.dataset.summaryFilter === filter;
+            item.classList.toggle('is-active', isActive);
+            item.setAttribute('aria-pressed', String(isActive));
+        });
+
+        renderCompanyDocuments();
     }
 
     function ensureProfileDrawer() {
@@ -1309,18 +1319,27 @@
         }
 
         const cards = [
-            ['Da caricare', summary.missing, 'missing'],
-            ['In attesa', summary.pending, 'pending'],
-            ['Approvati', summary.approved, 'approved'],
-            ['In scadenza', summary.expiring, 'warning'],
+            ['Da caricare', summary.missing, 'missing', 'missing'],
+            ['In attesa', summary.pending, 'pending', 'pending'],
+            ['Approvati', summary.approved, 'approved', 'approved'],
+            ['Respinti', summary.rejected, 'rejected', 'rejected'],
+            ['In scadenza', summary.expiring, 'warning', 'expiring'],
         ];
 
-        container.innerHTML = cards.map(([label, value, tone]) => `
-            <article class="summary-card ${tone}">
+        container.innerHTML = cards.map(([label, value, tone, filter]) => `
+            <button class="summary-card ${tone}" type="button" data-summary-filter="${escapeHtml(filter)}" aria-pressed="${appState.documentFilter === filter}">
                 <span>${escapeHtml(label)}</span>
                 <strong>${escapeHtml(value)}</strong>
-            </article>
+            </button>
         `).join('');
+
+        qsa('[data-summary-filter]', container).forEach((button) => {
+            button.addEventListener('click', () => {
+                setDocumentFilter(button.dataset.summaryFilter || 'all');
+            });
+        });
+
+        setDocumentFilter(appState.documentFilter);
     }
 
     function renderExpiringDocuments(documents) {
