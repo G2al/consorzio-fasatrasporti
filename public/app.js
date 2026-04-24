@@ -1779,6 +1779,7 @@
             </div>
         `;
         backdrop.classList.add('is-open');
+        document.body.classList.add('has-open-modal');
         bindModalTabs(body);
 
         const refresh = async () => {
@@ -1828,12 +1829,14 @@
         qsa('[data-close-modal]').forEach((button) => {
             button.addEventListener('click', () => {
                 backdrop.classList.remove('is-open');
+                document.body.classList.remove('has-open-modal');
             });
         });
 
         backdrop.addEventListener('click', (event) => {
             if (event.target === backdrop) {
                 backdrop.classList.remove('is-open');
+                document.body.classList.remove('has-open-modal');
             }
         });
     }

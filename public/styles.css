@@ -35,6 +35,10 @@ body {
     letter-spacing: 0;
 }
 
+body.has-open-modal {
+    overflow: hidden;
+}
+
 a {
     color: inherit;
 }
@@ -846,7 +850,12 @@ select {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 16px;
+    min-width: 0;
     padding: 16px;
+}
+
+.document-card > div {
+    min-width: 0;
 }
 
 .document-badges {
@@ -860,6 +869,7 @@ select {
 .document-title,
 .entity-title {
     margin: 0;
+    overflow-wrap: anywhere;
     font-weight: 650;
 }
 
@@ -867,6 +877,7 @@ select {
     margin: 6px 0 0;
     color: var(--muted);
     font-size: 14px;
+    overflow-wrap: anywhere;
 }
 
 .status {
@@ -1583,6 +1594,7 @@ select {
     display: grid;
     width: min(780px, 100%);
     max-height: min(760px, calc(100vh - 36px));
+    max-height: min(760px, calc(100dvh - 36px));
     grid-template-rows: auto 1fr;
     overflow: hidden;
     border-radius: 8px;
@@ -1596,18 +1608,27 @@ select {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    min-width: 0;
     border-bottom: 1px solid var(--line);
     background: var(--surface);
     padding: 16px;
 }
 
+.modal-head > div {
+    min-width: 0;
+}
+
 .modal-head h2 {
     margin: 0;
+    overflow-wrap: anywhere;
     font-size: 20px;
 }
 
 .modal-body {
+    min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 16px;
 }
 
@@ -1904,12 +1925,31 @@ select {
 
     .modal-backdrop {
         align-items: flex-end;
-        padding: 10px;
+        padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
     }
 
     .modal {
+        width: 100%;
         max-height: calc(100vh - 20px);
+        max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - env(safe-area-inset-bottom));
         border-radius: 8px 8px 0 0;
+    }
+
+    .modal-head {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        align-items: flex-start;
+        padding: 14px;
+    }
+
+    .modal-head h2 {
+        font-size: 18px;
+        line-height: 1.18;
+    }
+
+    .modal-body {
+        padding: 14px;
     }
 
     .bottom-nav {
