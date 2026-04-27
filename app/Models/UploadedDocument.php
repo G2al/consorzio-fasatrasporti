@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Storage;
 
@@ -19,6 +18,7 @@ class UploadedDocument extends Model
         'documentable_type',
         'file_path',
         'status',
+        'has_expiry',
         'expiry_date',
         'approved_at',
         'admin_notes',
@@ -28,6 +28,7 @@ class UploadedDocument extends Model
     {
         return [
             'expiry_date' => 'date',
+            'has_expiry' => 'boolean',
             'approved_at' => 'datetime',
         ];
     }
@@ -40,11 +41,6 @@ class UploadedDocument extends Model
     public function documentable(): MorphTo
     {
         return $this->morphTo();
-    }
-
-    public function versions(): HasMany
-    {
-        return $this->hasMany(UploadedDocumentVersion::class);
     }
 
     public function companyUser(): ?User
@@ -67,6 +63,10 @@ class UploadedDocument extends Model
     protected static function booted(): void
     {
         static::saving(function (UploadedDocument $document): void {
+            if (! $document->has_expiry) {
+                $document->expiry_date = null;
+            }
+
             if ($document->status === 'approved' && blank($document->approved_at)) {
                 $document->approved_at = now();
             }
@@ -77,8 +77,6 @@ class UploadedDocument extends Model
         });
 
         static::deleting(function (UploadedDocument $document): void {
-            $document->versions()->get()->each->delete();
-
             if ($document->file_path) {
                 Storage::disk('public')->delete($document->file_path);
             }

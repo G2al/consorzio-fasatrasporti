@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\DocumentTemplate;
 use App\Models\Vehicle;
+use App\Models\VehicleCapacity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class VehicleController extends Controller
 {
@@ -30,8 +32,8 @@ class VehicleController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'brand_model' => ['required', 'string', 'max:255'],
             'plate' => ['required', 'string', 'max:255'],
+            'capacity' => ['required', 'integer', Rule::in($this->capacityValues())],
         ]);
 
         $vehicle = $request->user()->vehicles()->create($data);
@@ -47,8 +49,8 @@ class VehicleController extends Controller
         $this->authorizeOwner($request, $vehicle);
 
         $data = $request->validate([
-            'brand_model' => ['required', 'string', 'max:255'],
             'plate' => ['required', 'string', 'max:255'],
+            'capacity' => ['required', 'integer', Rule::in($this->capacityValues())],
         ]);
 
         $vehicle->update($data);
@@ -65,7 +67,7 @@ class VehicleController extends Controller
 
         AuditLog::record('vehicle.deleted', $vehicle, 'Veicolo eliminato', [
             'plate' => $vehicle->plate,
-            'brand_model' => $vehicle->brand_model,
+            'capacity' => $vehicle->capacity,
         ], actor: $request->user());
         $vehicle->delete();
 
@@ -83,8 +85,8 @@ class VehicleController extends Controller
     {
         return [
             'id' => $vehicle->id,
-            'brand_model' => $vehicle->brand_model,
             'plate' => $vehicle->plate,
+            'capacity' => $vehicle->capacity,
             'documents_count' => $vehicle->documents_count ?? $vehicle->documents()->count(),
             'approved_documents_count' => $vehicle->approved_documents_count ?? $vehicle->documents()->where('status', 'approved')->count(),
             'pending_documents_count' => $vehicle->pending_documents_count ?? $vehicle->documents()->where('status', 'pending')->count(),
@@ -108,5 +110,13 @@ class VehicleController extends Controller
         return DocumentTemplate::query()
             ->whereHas('section', fn ($query) => $query->where('slug', 'veicoli'))
             ->count();
+    }
+
+    private function capacityValues(): array
+    {
+        return VehicleCapacity::query()
+            ->orderBy('seats')
+            ->pluck('seats')
+            ->all() ?: VehicleCapacity::VALUES;
     }
 }

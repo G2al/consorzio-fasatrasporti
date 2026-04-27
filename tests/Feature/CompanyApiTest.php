@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\UploadedDocument;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -22,13 +23,23 @@ class CompanyApiTest extends TestCase
         $registerResponse = $this->postJson('/api/register', [
             'name' => 'Trasporti Demo SRL',
             'responsible_name' => 'Mario Rossi',
+            'responsible_phone' => '+393201887833',
             'vat_number' => '12345678901',
             'email' => 'demo@example.com',
             'password' => 'Password1',
             'password_confirmation' => 'Password1',
         ])->assertCreated();
 
-        $token = $registerResponse->json('token');
+        $registerResponse
+            ->assertJsonPath('user.approval_status', 'pending')
+            ->assertJsonMissingPath('token');
+
+        $this->postJson('/api/login', [
+            'email' => 'demo@example.com',
+            'password' => 'Password1',
+        ])->assertUnprocessable();
+
+        $token = $this->approveAndLogin('demo@example.com');
 
         $this->withToken($token)
             ->getJson('/api/sections')
@@ -39,7 +50,7 @@ class CompanyApiTest extends TestCase
             ->postJson('/api/employees', [
                 'first_name' => 'Luca',
                 'last_name' => 'Bianchi',
-                'tax_code' => 'BNCLCU80A01H501X',
+                'phone' => '+393201887833',
             ])
             ->assertCreated()
             ->json('employee.id');
@@ -56,12 +67,25 @@ class CompanyApiTest extends TestCase
                 'template_id' => $templateId,
                 'documentable_type' => 'employee',
                 'documentable_id' => $employeeId,
+                'has_expiry' => '1',
                 'expiry_date' => '2030-01-01',
                 'file' => UploadedFile::fake()->create('documento.pdf', 24, 'application/pdf'),
             ])
             ->assertCreated()
             ->assertJsonPath('document.status', 'pending')
-            ->assertJsonPath('document.expiry_date', null);
+            ->assertJsonPath('document.has_expiry', true)
+            ->assertJsonPath('document.expiry_date', '2030-01-01');
+
+        $this->withHeaders(['Accept' => 'application/json'])
+            ->withToken($token)
+            ->post('/api/documents', [
+                'template_id' => $templateId,
+                'documentable_type' => 'employee',
+                'documentable_id' => $employeeId,
+                'has_expiry' => '0',
+                'file' => UploadedFile::fake()->create('foto.jpg', 24, 'image/jpeg'),
+            ])
+            ->assertUnprocessable();
 
         Storage::disk('public')->assertExists($uploadResponse->json('document.file_path'));
         $firstPath = $uploadResponse->json('document.file_path');
@@ -71,18 +95,16 @@ class CompanyApiTest extends TestCase
                 'template_id' => $templateId,
                 'documentable_type' => 'employee',
                 'documentable_id' => $employeeId,
+                'has_expiry' => '0',
                 'file' => UploadedFile::fake()->create('documento-nuovo.pdf', 24, 'application/pdf'),
             ])
             ->assertCreated()
             ->assertJsonPath('document.status', 'pending')
-            ->assertJsonCount(1, 'document.versions');
+            ->assertJsonPath('document.has_expiry', false)
+            ->assertJsonPath('document.expiry_date', null);
 
-        Storage::disk('public')->assertExists($firstPath);
+        Storage::disk('public')->assertMissing($firstPath);
         Storage::disk('public')->assertExists($secondUploadResponse->json('document.file_path'));
-        $this->assertDatabaseHas('uploaded_document_versions', [
-            'uploaded_document_id' => $secondUploadResponse->json('document.id'),
-            'file_path' => $firstPath,
-        ]);
 
         $this->withToken($token)
             ->getJson('/api/dashboard')
@@ -143,12 +165,11 @@ class CompanyApiTest extends TestCase
         ])->assertUnprocessable();
     }
 
-    public function test_company_can_upload_multiple_documents_together(): void
+    public function test_bulk_upload_endpoint_is_not_available(): void
     {
         $this->seed();
-        Storage::fake('public');
 
-        $registerResponse = $this->postJson('/api/register', [
+        $this->postJson('/api/register', [
             'name' => 'Bulk Trasporti SRL',
             'responsible_name' => 'Anna Verdi',
             'vat_number' => '98765432109',
@@ -157,43 +178,21 @@ class CompanyApiTest extends TestCase
             'password_confirmation' => 'Password1',
         ])->assertCreated();
 
-        $token = $registerResponse->json('token');
-        $documentsResponse = $this->withToken($token)
-            ->getJson('/api/company/documents')
-            ->assertOk();
-
-        $templateIds = collect($documentsResponse->json('documents'))
-            ->take(2)
-            ->pluck('template.id')
-            ->values();
-
-        $response = $this->withToken($token)
-            ->post('/api/documents/bulk', [
-                'documentable_type' => 'company',
-                'documents' => [
-                    $templateIds[0] => UploadedFile::fake()->create('bilancio.pdf', 24, 'application/pdf'),
-                    $templateIds[1] => UploadedFile::fake()->create('durc.pdf', 24, 'application/pdf'),
-                ],
-            ])
-            ->assertCreated()
-            ->assertJsonCount(2, 'documents')
-            ->assertJsonPath('documents.0.status', 'pending')
-            ->assertJsonPath('documents.1.status', 'pending');
-
-        collect($response->json('documents'))
-            ->each(fn (array $document) => Storage::disk('public')->assertExists($document['file_path']));
+        $token = $this->approveAndLogin('bulk@example.com');
 
         $this->withToken($token)
-            ->getJson('/api/dashboard')
-            ->assertOk()
-            ->assertJsonPath('summary.uploaded', 2);
+            ->postJson('/api/documents/bulk', [
+                'documentable_type' => 'company',
+                'documents' => [],
+            ])
+            ->assertNotFound();
     }
 
     public function test_company_can_update_profile_and_password(): void
     {
         $this->seed();
 
-        $registerResponse = $this->postJson('/api/register', [
+        $this->postJson('/api/register', [
             'name' => 'Profilo SRL',
             'responsible_name' => 'Lara Neri',
             'vat_number' => '11122233344',
@@ -202,12 +201,13 @@ class CompanyApiTest extends TestCase
             'password_confirmation' => 'Password1',
         ])->assertCreated();
 
-        $token = $registerResponse->json('token');
+        $token = $this->approveAndLogin('profilo@example.com');
 
         $this->withToken($token)
             ->putJson('/api/profile', [
                 'name' => 'Profilo Aggiornato SRL',
                 'responsible_name' => 'Lara Bianchi',
+                'responsible_phone' => '+393209998877',
                 'vat_number' => '44433322211',
                 'email' => 'profilo-new@example.com',
             ])
@@ -246,6 +246,7 @@ class CompanyApiTest extends TestCase
         $this->postJson('/api/register', [
             'name' => 'Telegram Trasporti SRL',
             'responsible_name' => 'Giovanni Verdi',
+            'responsible_phone' => '+393201887833',
             'vat_number' => '55566677788',
             'email' => 'telegram@example.com',
             'password' => 'Password1',
@@ -253,12 +254,29 @@ class CompanyApiTest extends TestCase
         ])->assertCreated();
 
         Http::assertSent(function ($request): bool {
+            $text = (string) $request['text'];
+
             return $request->url() === 'https://api.telegram.org/bottest-token/sendMessage'
                 && $request['chat_id'] === '-5262387162'
-                && str_contains((string) $request['text'], '🟢 <b>Nuova società registrata</b>')
-                && str_contains((string) $request['text'], '🏢 <b>Società</b>')
-                && str_contains((string) $request['text'], 'Telegram Trasporti SRL')
-                && str_contains((string) $request['text'], 'telegram@example.com');
+                && str_contains($text, '🆕 <b>Nuova registrazione</b>')
+                && str_contains($text, '🏢 <b>Società:</b> Telegram Trasporti SRL')
+                && str_contains($text, '+393201887833')
+                && str_contains($text, 'telegram@example.com');
         });
+    }
+
+    private function approveAndLogin(string $email): string
+    {
+        User::query()
+            ->where('email', $email)
+            ->update([
+                'approval_status' => 'approved',
+                'approved_at' => now(),
+            ]);
+
+        return $this->postJson('/api/login', [
+            'email' => $email,
+            'password' => 'Password1',
+        ])->assertOk()->json('token');
     }
 }

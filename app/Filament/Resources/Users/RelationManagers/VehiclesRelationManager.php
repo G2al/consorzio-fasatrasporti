@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources\Users\RelationManagers;
 
+use App\Models\VehicleCapacity;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
@@ -23,14 +25,21 @@ class VehiclesRelationManager extends RelationManager
     {
         return $schema
             ->components([
-                TextInput::make('brand_model')
-                    ->label('Marca e modello')
-                    ->required()
-                    ->maxLength(255),
                 TextInput::make('plate')
                     ->label('Targa')
                     ->required()
                     ->maxLength(255),
+                Select::make('capacity')
+                    ->label('Capienza')
+                    ->options(fn (): array => collect(VehicleCapacity::query()
+                        ->orderBy('seats')
+                        ->pluck('seats')
+                        ->all() ?: VehicleCapacity::VALUES)
+                        ->mapWithKeys(fn (int $seats): array => [$seats => $seats.' posti'])
+                        ->all())
+                    ->native(false)
+                    ->required()
+                    ->searchable(),
             ]);
     }
 
@@ -39,12 +48,13 @@ class VehiclesRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('plate')
             ->columns([
-                TextColumn::make('brand_model')
-                    ->label('Marca e modello')
-                    ->searchable(),
                 TextColumn::make('plate')
                     ->label('Targa')
                     ->searchable(),
+                TextColumn::make('capacity')
+                    ->label('Capienza')
+                    ->formatStateUsing(fn (int|string|null $state): string => $state ? $state.' posti' : '-')
+                    ->sortable(),
                 TextColumn::make('documents_count')
                     ->counts('documents')
                     ->label('Documenti'),

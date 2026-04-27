@@ -12,7 +12,9 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -49,9 +51,13 @@ class DocumentsRelationManager extends RelationManager
                     ])
                     ->default('pending')
                     ->required(),
+                Toggle::make('has_expiry')
+                    ->label('Ha scadenza')
+                    ->live(),
                 DatePicker::make('expiry_date')
                     ->label('Scadenza')
-                    ->helperText('Opzionale. La societa la vede solo come informazione.'),
+                    ->visible(fn (Get $get): bool => (bool) $get('has_expiry'))
+                    ->required(fn (Get $get): bool => (bool) $get('has_expiry')),
                 DateTimePicker::make('approved_at')
                     ->label('Data approvazione')
                     ->helperText('Se lo stato e approvato viene compilata automaticamente.'),
@@ -96,6 +102,12 @@ class DocumentsRelationManager extends RelationManager
                 CreateAction::make(),
             ])
             ->recordActions([
+                \Filament\Actions\Action::make('download')
+                    ->label('Scarica')
+                    ->icon(\Filament\Support\Icons\Heroicon::OutlinedArrowDownTray)
+                    ->visible(fn ($record): bool => $record->status === 'approved')
+                    ->url(fn ($record): string => route('admin.downloads.documents.show', $record))
+                    ->openUrlInNewTab(),
                 EditAction::make(),
                 DeleteAction::make(),
             ])

@@ -33,7 +33,7 @@ class EmployeeController extends Controller
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'tax_code' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:30'],
         ]);
 
         $employee = $request->user()->employees()->create($data);
@@ -51,7 +51,7 @@ class EmployeeController extends Controller
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'tax_code' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:30'],
         ]);
 
         $employee->update($data);
@@ -87,7 +87,7 @@ class EmployeeController extends Controller
             'id' => $employee->id,
             'first_name' => $employee->first_name,
             'last_name' => $employee->last_name,
-            'tax_code' => $employee->tax_code,
+            'phone' => $employee->phone,
             'documents_count' => $employee->documents_count ?? $employee->documents()->count(),
             'approved_documents_count' => $employee->approved_documents_count ?? $employee->documents()->where('status', 'approved')->count(),
             'pending_documents_count' => $employee->pending_documents_count ?? $employee->documents()->where('status', 'pending')->count(),

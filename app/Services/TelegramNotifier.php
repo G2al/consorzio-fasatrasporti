@@ -11,6 +11,16 @@ class TelegramNotifier
 {
     public function notifyCompanyRegistered(User $company): void
     {
+        $this->sendCompanyMessage($company, $this->registrationMessage($company));
+    }
+
+    public function notifyCompanyApproved(User $company): void
+    {
+        $this->sendCompanyMessage($company, $this->approvalMessage($company));
+    }
+
+    private function sendCompanyMessage(User $company, string $message): void
+    {
         if (! $this->isEnabled()) {
             return;
         }
@@ -30,11 +40,11 @@ class TelegramNotifier
                     'chat_id' => $chatId,
                     'parse_mode' => 'HTML',
                     'disable_web_page_preview' => true,
-                    'text' => $this->registrationMessage($company),
+                    'text' => $message,
                 ])
                 ->throw();
         } catch (Throwable $exception) {
-            Log::warning('Invio notifica Telegram registrazione societa non riuscito.', [
+            Log::warning('Invio notifica Telegram societa non riuscito.', [
                 'company_id' => $company->id,
                 'message' => $exception->getMessage(),
             ]);
@@ -56,28 +66,25 @@ class TelegramNotifier
 
     private function registrationMessage(User $company): string
     {
-        $adminUrl = rtrim((string) config('app.url'), '/').'/admin';
-
         return implode("\n", [
-            '🟢 <b>Nuova società registrata</b>',
-            '━━━━━━━━━━━━━━━━━━━━',
-            '',
-            '🏢 <b>Società</b>',
-            $this->escape($company->name),
-            '',
-            '👤 <b>Responsabile</b>',
-            $this->escape($company->responsible_name ?: 'Non indicato'),
-            '',
-            '🧾 <b>Partita IVA</b>',
-            $this->escape($company->vat_number ?: 'Non indicata'),
-            '',
-            '✉️ <b>Email</b>',
-            $this->escape($company->email),
-            '',
-            '🕒 <b>Registrata il</b>',
-            $company->created_at?->format('d/m/Y H:i'),
-            '',
-            '🔗 <a href="'.$this->escape($adminUrl).'">Apri pannello admin</a>',
+            '🆕 <b>Nuova registrazione</b>',
+            '🏢 <b>Società:</b> '.$this->escape($company->name),
+            '👤 <b>Responsabile:</b> '.$this->escape($company->responsible_name ?: 'Non indicato'),
+            '📞 <b>Telefono:</b> '.$this->escape($company->responsible_phone ?: 'Non indicato'),
+            '📧 <b>Email:</b> '.$this->escape($company->email),
+            '⏳ <b>Stato:</b> in attesa di approvazione',
+        ]);
+    }
+
+    private function approvalMessage(User $company): string
+    {
+        return implode("\n", [
+            '✅ <b>Account approvato</b>',
+            '🏢 <b>Società:</b> '.$this->escape($company->name),
+            '👤 <b>Responsabile:</b> '.$this->escape($company->responsible_name ?: 'Non indicato'),
+            '📞 <b>Telefono:</b> '.$this->escape($company->responsible_phone ?: 'Non indicato'),
+            '📧 <b>Email:</b> '.$this->escape($company->email),
+            '📌 <b>Stato:</b> approvato dall admin',
         ]);
     }
 

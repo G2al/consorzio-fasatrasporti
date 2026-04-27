@@ -5,6 +5,7 @@ namespace App\Filament\Resources\DocumentTemplates;
 use App\Filament\Resources\DocumentTemplates\Pages\ManageDocumentTemplates;
 use App\Models\DocumentTemplate;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -82,6 +83,12 @@ class DocumentTemplateResource extends Resource
                     ->relationship('section', 'name'),
             ])
             ->recordActions([
+                Action::make('downloadApproved')
+                    ->label('Scarica approvati')
+                    ->icon(Heroicon::OutlinedArrowDownTray)
+                    ->color('gray')
+                    ->url(fn (DocumentTemplate $record): string => route('admin.downloads.templates.show', $record))
+                    ->openUrlInNewTab(),
                 EditAction::make(),
                 DeleteAction::make(),
             ])

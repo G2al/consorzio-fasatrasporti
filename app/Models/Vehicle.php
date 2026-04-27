@@ -13,8 +13,8 @@ class Vehicle extends Model
 
     protected $fillable = [
         'user_id',
-        'brand_model',
         'plate',
+        'capacity',
     ];
 
     public function user(): BelongsTo

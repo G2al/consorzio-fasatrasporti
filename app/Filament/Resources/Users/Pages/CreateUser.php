@@ -12,6 +12,8 @@ class CreateUser extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $data['role'] = 'company';
+        $data['approval_status'] ??= 'approved';
+        $data['approved_at'] = $data['approval_status'] === 'approved' ? now() : null;
 
         return $data;
     }

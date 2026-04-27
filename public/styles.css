@@ -949,55 +949,15 @@ select {
 .upload-form {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) auto;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 10px;
     align-items: end;
     margin-top: 12px;
 }
 
-.bulk-upload-card {
-    display: grid;
-    gap: 14px;
-    border: 1px solid rgba(25, 107, 105, 0.22);
-    border-radius: 8px;
-    background: linear-gradient(180deg, #ffffff, #f6fbf9);
-    box-shadow: 0 10px 24px rgba(27, 37, 36, 0.06);
-    padding: 14px;
-}
-
-.bulk-upload-head {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-}
-
-.bulk-upload-head strong {
-    font-weight: 600;
-}
-
-.bulk-upload-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 10px;
-}
-
-.bulk-upload-row {
-    display: grid;
-    gap: 8px;
-    min-width: 0;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #ffffff;
-    padding: 10px;
-}
-
-.bulk-upload-row > span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 14px;
-    font-weight: 550;
+.upload-form .upload-progress,
+.upload-form .file-field {
+    grid-column: 1 / -1;
 }
 
 .list-toolbar {
@@ -1906,7 +1866,6 @@ select {
 
     .inline-form,
     .upload-form,
-    .bulk-upload-head,
     .document-card,
     .dashboard-summary,
     .deadline-card,

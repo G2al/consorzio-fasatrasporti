@@ -456,31 +456,6 @@
         return `<p class="meta">${parts.map(escapeHtml).join(' &middot; ')}</p>`;
     }
 
-    function documentHistory(uploaded) {
-        if (!uploaded?.versions?.length) {
-            return '';
-        }
-
-        const rows = uploaded.versions.map((version, index) => {
-            const status = statusLabels[version.status] || version.status;
-            const date = formatDate(version.versioned_at || version.created_at, true) || `Versione ${index + 1}`;
-
-            return `
-                <li>
-                    <a href="${escapeHtml(version.file_url)}" target="_blank" rel="noreferrer">File precedente</a>
-                    <span>${escapeHtml(status)} &middot; ${escapeHtml(date)}</span>
-                </li>
-            `;
-        }).join('');
-
-        return `
-            <details class="document-history">
-                <summary>Storico file (${uploaded.versions.length})</summary>
-                <ul>${rows}</ul>
-            </details>
-        `;
-    }
-
     function userDisplay() {
         try {
             const user = JSON.parse(sessionStorage.getItem(userKey) || localStorage.getItem(userKey) || '{}');
@@ -510,7 +485,7 @@
             return;
         }
 
-        ['name', 'responsible_name', 'vat_number', 'email'].forEach((field) => {
+        ['name', 'responsible_name', 'responsible_phone', 'vat_number', 'email'].forEach((field) => {
             const input = qs(`[name="${field}"]`, form);
 
             if (input) {
@@ -590,7 +565,6 @@
         }
 
         container.innerHTML = `
-            ${bulkUploadForm(documents, options)}
             ${documents.map((item) => {
             const uploaded = item.uploaded_document;
             const status = item.status || 'missing';
@@ -601,7 +575,6 @@
                 ? `<p class="meta"><a href="${escapeHtml(uploaded.file_url)}" target="_blank" rel="noreferrer">Apri file</a></p>`
                 : '';
             const dates = documentMeta(uploaded, status);
-            const history = documentHistory(uploaded);
             const upload = ['missing', 'rejected'].includes(status)
                 ? uploadForm(item.template.id, options.type, options.id)
                 : '';
@@ -613,7 +586,6 @@
                         ${file}
                         ${dates}
                         ${note}
-                        ${history}
                         ${upload}
                     </div>
                     <div class="document-badges">
@@ -625,10 +597,9 @@
         }).join('')}
         `;
 
-        bindBulkUploadForms(container, options);
-
         qsa('[data-upload-form]', container).forEach((form) => {
             bindFileInputs(form);
+            bindExpiryToggle(form);
 
             form.addEventListener('submit', async (event) => {
                 event.preventDefault();
@@ -653,90 +624,6 @@
         });
     }
 
-    function bulkUploadForm(documents, options) {
-        const uploadable = documents.filter((item) => ['missing', 'rejected'].includes(item.status || 'missing'));
-
-        if (!uploadable.length || !options.type) {
-            return '';
-        }
-
-        return `
-            <form class="bulk-upload-card" data-bulk-upload-form>
-                <input type="hidden" name="documentable_type" value="${escapeHtml(options.type)}">
-                ${options.id ? `<input type="hidden" name="documentable_id" value="${escapeHtml(options.id)}">` : ''}
-                <div class="bulk-upload-head">
-                    <span class="entity-icon small">${svg('file')}</span>
-                    <div>
-                        <strong>Caricamento multiplo</strong>
-                        <p class="meta">Seleziona o trascina i file sui documenti richiesti, poi inviali con un solo click.</p>
-                    </div>
-                    <button class="btn" type="submit" data-loading-text="Caricamento..."><span class="btn-content">${svg('upload')}Carica selezionati</span><span class="btn-loader" aria-hidden="true"></span></button>
-                </div>
-                <div class="bulk-upload-grid">
-                    ${uploadable.map((item) => `
-                        <div class="bulk-upload-row">
-                            <span>${escapeHtml(item.template.name)}</span>
-                            <label class="file-picker compact">
-                                <input class="file-input" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-file-input data-bulk-file-input data-template-id="${escapeHtml(item.template.id)}">
-                                <span class="file-picker-icon">${svg('upload')}</span>
-                                <span data-file-name>Trascina o seleziona</span>
-                            </label>
-                        </div>
-                    `).join('')}
-                </div>
-                <div class="upload-progress" data-upload-progress><span></span></div>
-            </form>
-        `;
-    }
-
-    function bindBulkUploadForms(container, options) {
-        qsa('[data-bulk-upload-form]', container).forEach((form) => {
-            bindFileInputs(form);
-
-            form.addEventListener('submit', async (event) => {
-                event.preventDefault();
-                hideAlert();
-
-                const inputs = qsa('[data-bulk-file-input]', form)
-                    .filter((input) => input.files?.length);
-
-                if (!inputs.length) {
-                    showAlert('Seleziona almeno un file da caricare.');
-                    return;
-                }
-
-                const button = qs('button[type="submit"]', form);
-                const formData = new FormData();
-                const type = qs('[name="documentable_type"]', form)?.value;
-                const id = qs('[name="documentable_id"]', form)?.value;
-
-                formData.append('documentable_type', type);
-
-                if (id) {
-                    formData.append('documentable_id', id);
-                }
-
-                inputs.forEach((input) => {
-                    formData.append(`documents[${input.dataset.templateId}]`, input.files[0]);
-                });
-
-                setButtonLoading(button, true, 'Caricamento...');
-                updateUploadProgress(form, 0);
-
-                try {
-                    const data = await apiUpload('/documents/bulk', formData, (progress) => updateUploadProgress(form, progress));
-                    documentCache.delete(options.endpoint || '');
-                    showAlert(`${data.documents.length} documenti caricati.`, 'success');
-                    await options.refresh();
-                } catch (error) {
-                    showAlert(error.message);
-                } finally {
-                    setButtonLoading(button, false);
-                }
-            });
-        });
-    }
-
     function uploadForm(templateId, type, id) {
         return `
             <form class="upload-form" data-upload-form>
@@ -746,15 +633,49 @@
                 <div class="field file-field">
                     <label>File</label>
                     <label class="file-picker">
-                        <input class="file-input" type="file" name="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf,image/jpeg,image/png,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required data-file-input>
+                        <input class="file-input" type="file" name="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required data-file-input>
                         <span class="file-picker-icon">${svg('upload')}</span>
-                        <span data-file-name>Trascina qui o seleziona file</span>
+                        <span data-file-name>Trascina qui o seleziona PDF/DOC</span>
                     </label>
+                </div>
+                <div class="field">
+                    <label>Scadenza documento</label>
+                    <select class="input" name="has_expiry" data-has-expiry required>
+                        <option value="0">No, non ha scadenza</option>
+                        <option value="1">Si, ha scadenza</option>
+                    </select>
+                </div>
+                <div class="field" data-expiry-date-field hidden>
+                    <label>Data scadenza</label>
+                    <input class="input" type="date" name="expiry_date" data-expiry-date>
                 </div>
                 <div class="upload-progress" data-upload-progress><span></span></div>
                 <button class="btn" type="submit" data-loading-text="Caricamento..."><span class="btn-content">${svg('upload')}Carica</span><span class="btn-loader" aria-hidden="true"></span></button>
             </form>
         `;
+    }
+
+    function bindExpiryToggle(form) {
+        const select = qs('[data-has-expiry]', form);
+        const dateField = qs('[data-expiry-date-field]', form);
+        const dateInput = qs('[data-expiry-date]', form);
+
+        if (!select || !dateField || !dateInput) {
+            return;
+        }
+
+        const sync = () => {
+            const hasExpiry = select.value === '1';
+            dateField.hidden = !hasExpiry;
+            dateInput.required = hasExpiry;
+
+            if (!hasExpiry) {
+                dateInput.value = '';
+            }
+        };
+
+        select.addEventListener('change', sync);
+        sync();
     }
 
     function bindFileInputs(scope = document) {
@@ -867,16 +788,16 @@
             setButtonLoading(button, true);
 
             try {
-                const data = await api('/register', {
+                await api('/register', {
                     method: 'POST',
                     body,
                 });
-                setAuth(data, remember);
-                showAlert('Registrazione completata.', 'success');
-                await sleep(redirectDelay);
-                window.location.href = 'index.html';
+                form.reset();
+                passwordAdvisor?.render();
+                showAlert('Registrazione effettuata. Attendi l approvazione dell admin prima di accedere.', 'success');
             } catch (error) {
                 showAlert(error.message);
+            } finally {
                 setButtonLoading(button, false);
             }
         });
@@ -1046,6 +967,10 @@
                             <div class="field">
                                 <label>Responsabile</label>
                                 <input class="input" name="responsible_name" type="text">
+                            </div>
+                            <div class="field">
+                                <label>Telefono responsabile</label>
+                                <input class="input" name="responsible_phone" type="tel">
                             </div>
                             <div class="field">
                                 <label>Partita IVA</label>
@@ -1524,7 +1449,7 @@
     function renderVehicles() {
         const container = qs('[data-vehicles]');
         const search = (qs('[data-vehicle-search]')?.value || '').trim().toLowerCase();
-        const vehicles = appState.vehicles.filter((vehicle) => `${vehicle.plate} ${vehicle.brand_model}`.toLowerCase().includes(search));
+        const vehicles = appState.vehicles.filter((vehicle) => `${vehicle.plate} ${vehicle.capacity}`.toLowerCase().includes(search));
 
         if (!vehicles.length) {
             container.innerHTML = '<div class="empty-state">Nessun veicolo presente.</div>';
@@ -1539,7 +1464,7 @@
                 <span class="entity-icon">${svg('truck')}</span>
                 <span class="entity-main">
                     <span class="entity-title">${escapeHtml(vehicle.plate)}</span>
-                    <span class="meta">${escapeHtml(vehicle.brand_model)} &middot; ${escapeHtml(progress.label)}</span>
+                    <span class="meta">${escapeHtml(vehicle.capacity)} posti &middot; ${escapeHtml(progress.label)}</span>
                     <span class="progress-line"><span style="width: ${progress.percent}%"></span></span>
                 </span>
                 ${statusPill(progressStatus(vehicle))}
@@ -1679,8 +1604,8 @@
                             <input class="input" name="last_name" type="text" value="${escapeHtml(options.entity.last_name)}" required>
                         </div>
                         <div class="field">
-                            <label>Codice fiscale</label>
-                            <input class="input" name="tax_code" type="text" value="${escapeHtml(options.entity.tax_code)}" required>
+                            <label>Telefono</label>
+                            <input class="input" name="phone" type="tel" value="${escapeHtml(options.entity.phone)}">
                         </div>
                         <button class="btn secondary" type="submit" data-loading-text="Salvataggio..."><span class="btn-content">Salva</span><span class="btn-loader" aria-hidden="true"></span></button>
                     </div>
@@ -1696,12 +1621,14 @@
                 </div>
                 <div class="modal-edit-grid">
                     <div class="field">
-                        <label>Marca e modello</label>
-                        <input class="input" name="brand_model" type="text" value="${escapeHtml(options.entity.brand_model)}" required>
-                    </div>
-                    <div class="field">
                         <label>Targa</label>
                         <input class="input" name="plate" type="text" value="${escapeHtml(options.entity.plate)}" required>
+                    </div>
+                    <div class="field">
+                        <label>Capienza</label>
+                        <select class="input" name="capacity" required>
+                            ${[7, 10, 12, 13, 15, 17, 18, 21, 23, 32].map((capacity) => `<option value="${capacity}" ${Number(options.entity.capacity) === capacity ? 'selected' : ''}>${capacity} posti</option>`).join('')}
+                        </select>
                     </div>
                     <button class="btn secondary" type="submit" data-loading-text="Salvataggio..."><span class="btn-content">Salva</span><span class="btn-loader" aria-hidden="true"></span></button>
                 </div>

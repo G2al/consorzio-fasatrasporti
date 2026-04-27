@@ -27,7 +27,10 @@ class User extends Authenticatable implements FilamentUser
         'email',
         'password',
         'role',
+        'approval_status',
+        'approved_at',
         'responsible_name',
+        'responsible_phone',
         'vat_number',
         'api_token',
     ];
@@ -80,6 +83,17 @@ class User extends Authenticatable implements FilamentUser
 
     protected static function booted(): void
     {
+        static::saving(function (User $user): void {
+            if ($user->role === 'company' && $user->approval_status !== 'approved') {
+                $user->approved_at = null;
+                $user->api_token = null;
+            }
+
+            if ($user->role === 'company' && $user->approval_status === 'approved' && blank($user->approved_at)) {
+                $user->approved_at = now();
+            }
+        });
+
         static::deleting(function (User $user): void {
             $user->documents()->get()->each->delete();
             $user->employees()->get()->each->delete();
@@ -96,6 +110,7 @@ class User extends Authenticatable implements FilamentUser
     {
         return [
             'email_verified_at' => 'datetime',
+            'approved_at' => 'datetime',
             'password' => 'hashed',
         ];
     }

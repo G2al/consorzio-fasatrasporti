@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\DocumentApprovals;
 
 use App\Filament\Resources\DocumentApprovals\Pages\ManageDocumentApprovals;
+use App\Mail\DocumentRejectedMail;
 use App\Models\AuditLog;
 use App\Models\Employee;
 use App\Models\UploadedDocument;
@@ -16,6 +17,7 @@ use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Html;
@@ -29,6 +31,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\HtmlString;
 
 class DocumentApprovalResource extends Resource
@@ -59,9 +62,14 @@ class DocumentApprovalResource extends Resource
                         'rejected' => 'Respinto',
                     ])
                     ->required(),
+                Toggle::make('has_expiry')
+                    ->label('Ha scadenza')
+                    ->live(),
                 DatePicker::make('expiry_date')
                     ->label('Scadenza')
-                    ->helperText('Opzionale. La societa la vede solo come informazione.'),
+                    ->helperText('Se la data non e corretta, modificala senza respingere il documento.')
+                    ->visible(fn (Get $get): bool => (bool) $get('has_expiry'))
+                    ->required(fn (Get $get): bool => (bool) $get('has_expiry')),
                 DateTimePicker::make('approved_at')
                     ->label('Data approvazione')
                     ->helperText('Compilata automaticamente dal pulsante Approva.'),
@@ -194,6 +202,15 @@ class DocumentApprovalResource extends Resource
                         ->when($data['expires_until'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('expiry_date', '<=', $date))),
             ])
             ->recordActions([
+                Action::make('download')
+                    ->label('Scarica')
+                    ->tooltip('Scarica documento approvato')
+                    ->icon(Heroicon::OutlinedArrowDownTray)
+                    ->iconButton()
+                    ->color('gray')
+                    ->visible(fn (UploadedDocument $record): bool => $record->status === 'approved')
+                    ->url(fn (UploadedDocument $record): string => route('admin.downloads.documents.show', $record))
+                    ->openUrlInNewTab(),
                 Action::make('review')
                     ->label('Revisiona')
                     ->tooltip('Revisiona documento')
@@ -254,13 +271,18 @@ class DocumentApprovalResource extends Resource
                                     ->live()
                                     ->required()
                                     ->columnSpanFull(),
+                                Toggle::make('has_expiry')
+                                    ->label('Il documento ha scadenza')
+                                    ->helperText('Se la data non e corretta, modificala e approva.')
+                                    ->live()
+                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve'),
                                 DatePicker::make('expiry_date')
                                     ->label('Scadenza')
-                                    ->helperText('Opzionale. Lascia vuoto se il documento non scade.')
-                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve'),
+                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve' && (bool) $get('has_expiry'))
+                                    ->required(fn (Get $get): bool => $get('decision') === 'approve' && (bool) $get('has_expiry')),
                                 Textarea::make('admin_notes')
                                     ->label('Note di rifiuto')
-                                    ->helperText('Obbligatorie se respingi il documento. Saranno visibili alla societa.')
+                                    ->helperText('Usa il respingimento solo se il file e errato, incompleto o non pertinente.')
                                     ->rows(4)
                                     ->required(fn (Get $get): bool => $get('decision') === 'reject')
                                     ->visible(fn (Get $get): bool => $get('decision') === 'reject')
@@ -270,6 +292,7 @@ class DocumentApprovalResource extends Resource
                     ])
                     ->fillForm(fn (UploadedDocument $record): array => [
                         'decision' => $record->status === 'rejected' ? 'reject' : 'approve',
+                        'has_expiry' => $record->has_expiry,
                         'expiry_date' => $record->expiry_date,
                         'admin_notes' => $record->admin_notes,
                         'review_section' => $record->template->section?->name,
@@ -287,7 +310,8 @@ class DocumentApprovalResource extends Resource
                         if (($data['decision'] ?? null) === 'approve') {
                             $record->update([
                                 'status' => 'approved',
-                                'expiry_date' => $data['expiry_date'] ?? null,
+                                'has_expiry' => (bool) ($data['has_expiry'] ?? false),
+                                'expiry_date' => ($data['has_expiry'] ?? false) ? ($data['expiry_date'] ?? null) : null,
                                 'approved_at' => now(),
                                 'admin_notes' => null,
                             ]);
@@ -312,6 +336,13 @@ class DocumentApprovalResource extends Resource
                             'admin_notes' => $data['admin_notes'],
                         ]);
 
+                        $record->loadMissing(['template', 'documentable']);
+                        $company = $record->companyUser();
+
+                        if ($company?->email) {
+                            Mail::to($company->email)->send(new DocumentRejectedMail($record));
+                        }
+
                         AuditLog::record('document.rejected', $record->fresh(['template', 'documentable']), 'Documento respinto', [
                             'template' => $record->template->name,
                             'notes' => $data['admin_notes'],
@@ -333,7 +364,7 @@ class DocumentApprovalResource extends Resource
         return match (true) {
             $documentable instanceof \App\Models\User => $documentable->name,
             $documentable instanceof \App\Models\Employee => trim("{$documentable->first_name} {$documentable->last_name}"),
-            $documentable instanceof \App\Models\Vehicle => "{$documentable->brand_model} ({$documentable->plate})",
+            $documentable instanceof \App\Models\Vehicle => "{$documentable->plate} ({$documentable->capacity} posti)",
             default => 'Elemento eliminato',
         };
     }
@@ -349,7 +380,7 @@ class DocumentApprovalResource extends Resource
 
         return match (true) {
             $documentable instanceof \App\Models\Employee => 'Dipendente: '.trim("{$documentable->first_name} {$documentable->last_name}"),
-            $documentable instanceof \App\Models\Vehicle => 'Veicolo: '.$documentable->brand_model.' ('.$documentable->plate.')',
+            $documentable instanceof \App\Models\Vehicle => 'Veicolo: '.$documentable->plate.' ('.$documentable->capacity.' posti)',
             default => null,
         };
     }
@@ -363,7 +394,7 @@ class DocumentApprovalResource extends Resource
 
     protected static function historyContent(UploadedDocument $record): HtmlString
     {
-        $record->loadMissing(['template.section', 'versions' => fn ($query) => $query->latest(), 'documentable']);
+        $record->loadMissing(['template.section', 'documentable']);
         $logs = AuditLog::query()
             ->where('auditable_type', UploadedDocument::class)
             ->where('auditable_id', $record->id)
@@ -371,17 +402,6 @@ class DocumentApprovalResource extends Resource
             ->latest()
             ->limit(10)
             ->get();
-
-        $versions = $record->versions->map(function ($version): string {
-            $date = $version->versioned_at?->format('d/m/Y H:i') ?? $version->created_at?->format('d/m/Y H:i') ?? '-';
-            $status = match ($version->status) {
-                'approved' => 'Approvato',
-                'rejected' => 'Respinto',
-                default => 'In attesa',
-            };
-
-            return '<li><a href="'.e($version->file_url).'" target="_blank">Apri versione</a><span>'.e($status).' - '.e($date).'</span></li>';
-        })->join('');
 
         $logRows = $logs->map(fn (AuditLog $log): string => '<li><strong>'.e($log->description).'</strong><span>'.e($log->user?->name ?? 'Sistema').' - '.e($log->created_at->format('d/m/Y H:i')).'</span></li>')->join('');
 
@@ -391,10 +411,6 @@ class DocumentApprovalResource extends Resource
                     <h3 class="text-sm font-semibold">Documento corrente</h3>
                     <p class="text-sm text-gray-600">'.e($record->template->name).' - '.e(static::documentableLabel($record)).'</p>
                     <p class="text-sm"><a href="'.e($record->file_url).'" target="_blank">Apri file corrente</a></p>
-                </div>
-                <div>
-                    <h3 class="text-sm font-semibold">Versioni precedenti</h3>
-                    <ul class="mt-2 space-y-2">'.($versions ?: '<li class="text-sm text-gray-600">Nessuna versione precedente.</li>').'</ul>
                 </div>
                 <div>
                     <h3 class="text-sm font-semibold">Attivita collegate</h3>

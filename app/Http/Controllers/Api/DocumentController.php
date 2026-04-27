@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class DocumentController extends Controller
 {
@@ -43,7 +43,9 @@ class DocumentController extends Controller
             'template_id' => ['required', 'integer', 'exists:document_templates,id'],
             'documentable_type' => ['required', 'string', 'in:company,employee,vehicle'],
             'documentable_id' => ['nullable', 'integer'],
-            'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:20480'],
+            'has_expiry' => ['required', 'boolean'],
+            'expiry_date' => ['nullable', 'required_if:has_expiry,1,true,on', 'date'],
+            'file' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:20480'],
         ]);
 
         $template = DocumentTemplate::query()
@@ -64,85 +66,21 @@ class DocumentController extends Controller
             $request->file('file'),
             $data['documentable_type'],
             $request->user()->id,
+            $request->boolean('has_expiry'),
+            $data['expiry_date'] ?? null,
         );
         AuditLog::record('document.uploaded', $document, 'Documento caricato', [
             'template' => $template->name,
             'type' => $data['documentable_type'],
+            'expiry_date' => $data['expiry_date'] ?? null,
         ], actor: $request->user());
 
         return response()->json([
-            'document' => $this->uploadedDocumentPayload($document->fresh(['template', 'versions'])),
+            'document' => $this->uploadedDocumentPayload($document->fresh(['template'])),
         ], 201);
     }
 
-    public function bulkUpload(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'documentable_type' => ['required', 'string', 'in:company,employee,vehicle'],
-            'documentable_id' => ['nullable', 'integer'],
-            'documents' => ['required', 'array', 'min:1'],
-            'documents.*' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:20480'],
-        ]);
-
-        $files = $request->file('documents', []);
-        $templateIds = collect(array_keys($files))
-            ->map(fn (int|string $id): int => (int) $id)
-            ->filter()
-            ->values();
-
-        abort_if($templateIds->isEmpty(), 422, 'Seleziona almeno un documento da caricare.');
-
-        $templates = DocumentTemplate::query()
-            ->with('section')
-            ->whereIn('id', $templateIds)
-            ->get()
-            ->keyBy('id');
-
-        abort_if($templates->count() !== $templateIds->unique()->count(), 422, 'Uno o piu documenti selezionati non sono validi.');
-
-        $templates->each(fn (DocumentTemplate $template) => $this->assertTemplateMatchesType($template, $data['documentable_type']));
-
-        $documentable = $this->resolveDocumentable(
-            $request,
-            $data['documentable_type'],
-            $data['documentable_id'] ?? null,
-        );
-
-        $documents = DB::transaction(function () use ($documentable, $templates, $files, $data, $request): array {
-            $stored = [];
-
-            foreach ($files as $templateId => $file) {
-                if (! $file instanceof UploadedFile) {
-                    continue;
-                }
-
-                $stored[] = $this->storeDocument(
-                    $documentable,
-                    $templates->get((int) $templateId),
-                    $file,
-                    $data['documentable_type'],
-                    $request->user()->id,
-                )->fresh(['template', 'versions']);
-            }
-
-            return $stored;
-        });
-
-        foreach ($documents as $document) {
-            AuditLog::record('document.bulk_uploaded', $document, 'Documento caricato in blocco', [
-                'template' => $document->template->name,
-                'type' => $data['documentable_type'],
-            ], actor: $request->user());
-        }
-
-        return response()->json([
-            'documents' => collect($documents)
-                ->map(fn (UploadedDocument $document): array => $this->uploadedDocumentPayload($document))
-                ->values(),
-        ], 201);
-    }
-
-    private function storeDocument(Model $documentable, DocumentTemplate $template, UploadedFile $file, string $type, int $companyId): UploadedDocument
+    private function storeDocument(Model $documentable, DocumentTemplate $template, UploadedFile $file, string $type, int $companyId, bool $hasExpiry, ?string $expiryDate): UploadedDocument
     {
         $path = $file->store(
             "uploaded-documents/{$companyId}/{$type}",
@@ -153,26 +91,19 @@ class DocumentController extends Controller
             ->where('template_id', $template->id)
             ->first();
 
-        if ($document instanceof UploadedDocument && $document->file_path) {
-            $document->versions()->create([
-                'template_id' => $document->template_id,
-                'file_path' => $document->file_path,
-                'status' => $document->status,
-                'expiry_date' => $document->expiry_date,
-                'approved_at' => $document->approved_at,
-                'admin_notes' => $document->admin_notes,
-                'versioned_at' => $document->updated_at,
-            ]);
-        }
-
         $payload = [
             'template_id' => $template->id,
             'file_path' => $path,
             'status' => 'pending',
-            'expiry_date' => null,
+            'has_expiry' => $hasExpiry,
+            'expiry_date' => $hasExpiry ? $expiryDate : null,
             'approved_at' => null,
             'admin_notes' => null,
         ];
+
+        if ($document instanceof UploadedDocument && $document->file_path) {
+            Storage::disk('public')->delete($document->file_path);
+        }
 
         return $document instanceof UploadedDocument
             ? tap($document)->update($payload)
@@ -187,7 +118,7 @@ class DocumentController extends Controller
             ->firstOrFail();
 
         $uploadedDocuments = $documentable->documents()
-            ->with(['template', 'versions' => fn ($query) => $query->latest()])
+            ->with('template')
             ->get()
             ->keyBy('template_id');
 
@@ -224,22 +155,10 @@ class DocumentController extends Controller
             'file_path' => $document->file_path,
             'file_url' => $document->file_url,
             'status' => $document->status,
+            'has_expiry' => $document->has_expiry,
             'expiry_date' => $document->expiry_date?->toDateString(),
             'approved_at' => $document->approved_at?->toIso8601String(),
             'admin_notes' => $document->admin_notes,
-            'versions' => $document->versions
-                ->take(5)
-                ->map(fn ($version): array => [
-                    'id' => $version->id,
-                    'file_url' => $version->file_url,
-                    'status' => $version->status,
-                    'expiry_date' => $version->expiry_date?->toDateString(),
-                    'approved_at' => $version->approved_at?->toIso8601String(),
-                    'admin_notes' => $version->admin_notes,
-                    'versioned_at' => $version->versioned_at?->toIso8601String(),
-                    'created_at' => $version->created_at?->toIso8601String(),
-                ])
-                ->values(),
             'created_at' => $document->created_at?->toIso8601String(),
             'updated_at' => $document->updated_at?->toIso8601String(),
         ];

@@ -21,28 +21,29 @@ class AuthController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'responsible_name' => ['nullable', 'string', 'max:255'],
+            'responsible_phone' => ['nullable', 'string', 'max:30'],
             'vat_number' => ['nullable', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()],
         ]);
 
-        $token = Str::random(80);
-
         $user = User::query()->create([
             'name' => $data['name'],
             'responsible_name' => $data['responsible_name'] ?? null,
+            'responsible_phone' => $data['responsible_phone'] ?? null,
             'vat_number' => $data['vat_number'] ?? null,
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
             'role' => 'company',
-            'api_token' => hash('sha256', $token),
+            'approval_status' => 'pending',
+            'approved_at' => null,
         ]);
 
         AuditLog::record('company.registered', $user, 'Societa registrata', actor: $user, company: $user);
         $telegramNotifier->notifyCompanyRegistered($user);
 
         return response()->json([
-            'token' => $token,
+            'message' => 'Registrazione effettuata. Attendi l approvazione dell admin prima di accedere.',
             'user' => $this->userPayload($user),
         ], 201);
     }
@@ -62,6 +63,12 @@ class AuthController extends Controller
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'email' => ['Credenziali non valide.'],
+            ]);
+        }
+
+        if ($user->approval_status !== 'approved') {
+            throw ValidationException::withMessages([
+                'email' => ['Account in attesa di approvazione da parte dell amministratore.'],
             ]);
         }
 
@@ -99,16 +106,17 @@ class AuthController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'responsible_name' => ['nullable', 'string', 'max:255'],
+            'responsible_phone' => ['nullable', 'string', 'max:30'],
             'vat_number' => ['nullable', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
         ]);
 
-        $original = $user->only(['name', 'responsible_name', 'vat_number', 'email']);
+        $original = $user->only(['name', 'responsible_name', 'responsible_phone', 'vat_number', 'email']);
         $user->update($data);
 
         AuditLog::record('company.profile_updated', $user, 'Profilo societa aggiornato', [
             'before' => $original,
-            'after' => $user->only(['name', 'responsible_name', 'vat_number', 'email']),
+            'after' => $user->only(['name', 'responsible_name', 'responsible_phone', 'vat_number', 'email']),
         ], actor: $user, company: $user);
 
         return response()->json([
@@ -161,7 +169,9 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'responsible_name' => $user->responsible_name,
+            'responsible_phone' => $user->responsible_phone,
             'vat_number' => $user->vat_number,
+            'approval_status' => $user->approval_status,
         ];
     }
 }

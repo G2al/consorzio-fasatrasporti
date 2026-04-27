@@ -31,10 +31,10 @@ class EmployeesRelationManager extends RelationManager
                     ->label('Cognome')
                     ->required()
                     ->maxLength(255),
-                TextInput::make('tax_code')
-                    ->label('Codice fiscale')
-                    ->required()
-                    ->maxLength(255),
+                TextInput::make('phone')
+                    ->label('Telefono')
+                    ->tel()
+                    ->maxLength(30),
             ]);
     }
 
@@ -49,8 +49,8 @@ class EmployeesRelationManager extends RelationManager
                 TextColumn::make('last_name')
                     ->label('Cognome')
                     ->searchable(),
-                TextColumn::make('tax_code')
-                    ->label('Codice fiscale')
+                TextColumn::make('phone')
+                    ->label('Telefono')
                     ->searchable(),
                 TextColumn::make('documents_count')
                     ->counts('documents')

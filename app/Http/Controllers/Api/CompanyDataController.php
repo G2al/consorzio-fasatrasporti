@@ -279,7 +279,7 @@ class CompanyDataController extends Controller
         return match (true) {
             $documentable instanceof User => $documentable->name,
             $documentable instanceof Employee => trim("{$documentable->first_name} {$documentable->last_name}"),
-            $documentable instanceof Vehicle => "{$documentable->brand_model} ({$documentable->plate})",
+            $documentable instanceof Vehicle => "{$documentable->plate} ({$documentable->capacity} posti)",
             default => 'Elemento eliminato',
         };
     }

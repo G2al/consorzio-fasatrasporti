@@ -49,12 +49,24 @@
 
         <form class="inline-form" data-vehicle-form>
             <div class="field">
-                <label for="brand_model">Marca e modello</label>
-                <input class="input" id="brand_model" name="brand_model" type="text" required>
-            </div>
-            <div class="field">
                 <label for="plate">Targa</label>
                 <input class="input" id="plate" name="plate" type="text" required>
+            </div>
+            <div class="field">
+                <label for="capacity">Capienza</label>
+                <select class="input" id="capacity" name="capacity" required>
+                    <option value="">Seleziona</option>
+                    <option value="7">7 posti</option>
+                    <option value="10">10 posti</option>
+                    <option value="12">12 posti</option>
+                    <option value="13">13 posti</option>
+                    <option value="15">15 posti</option>
+                    <option value="17">17 posti</option>
+                    <option value="18">18 posti</option>
+                    <option value="21">21 posti</option>
+                    <option value="23">23 posti</option>
+                    <option value="32">32 posti</option>
+                </select>
             </div>
             <button class="btn" type="submit">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>

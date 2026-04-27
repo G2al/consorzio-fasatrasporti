@@ -50,8 +50,7 @@ class AuditLogResource extends Resource
                         str_starts_with($record->action, 'document.rejected'),
                         str_ends_with($record->action, '.deleted') => 'danger',
                         str_starts_with($record->action, 'document.approved') => 'success',
-                        str_starts_with($record->action, 'document.uploaded'),
-                        str_starts_with($record->action, 'document.bulk_uploaded') => 'warning',
+                        str_starts_with($record->action, 'document.uploaded') => 'warning',
                         default => 'gray',
                     }),
                 TextColumn::make('readable_summary')

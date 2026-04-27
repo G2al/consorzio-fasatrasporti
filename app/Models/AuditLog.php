@@ -58,7 +58,6 @@ class AuditLog extends Model
             'vehicle.updated' => 'Veicolo aggiornato',
             'vehicle.deleted' => 'Veicolo eliminato',
             'document.uploaded' => 'Documento caricato',
-            'document.bulk_uploaded' => 'Caricamento multiplo',
             'document.approved' => 'Documento approvato',
             'document.rejected' => 'Documento respinto',
             default => str($action)->replace(['.', '_'], ' ')->headline()->toString(),
@@ -90,7 +89,7 @@ class AuditLog extends Model
         }
 
         if ($auditable instanceof Vehicle) {
-            return "{$auditable->plate} - {$auditable->brand_model}";
+            return "{$auditable->plate} - {$auditable->capacity} posti";
         }
 
         if ($auditable instanceof User) {
@@ -144,8 +143,8 @@ class AuditLog extends Model
             $parts[] = 'Targa: '.$metadata['plate'];
         }
 
-        if (! empty($metadata['brand_model'])) {
-            $parts[] = 'Mezzo: '.$metadata['brand_model'];
+        if (! empty($metadata['capacity'])) {
+            $parts[] = 'Capienza: '.$metadata['capacity'];
         }
 
         if (isset($metadata['before'], $metadata['after']) && is_array($metadata['before']) && is_array($metadata['after'])) {
@@ -173,7 +172,6 @@ class AuditLog extends Model
         if (! $company) {
             $company = match (true) {
                 $auditable instanceof UploadedDocument => $auditable->companyUser(),
-                $auditable instanceof UploadedDocumentVersion => $auditable->uploadedDocument?->companyUser(),
                 $auditable instanceof Employee,
                 $auditable instanceof Vehicle => $auditable->user,
                 $auditable instanceof User && $auditable->role === 'company' => $auditable,
@@ -207,8 +205,8 @@ class AuditLog extends Model
             return (string) $metadata['name'];
         }
 
-        if (! empty($metadata['plate']) || ! empty($metadata['brand_model'])) {
-            return trim(($metadata['plate'] ?? '').' - '.($metadata['brand_model'] ?? ''), ' -');
+        if (! empty($metadata['plate']) || ! empty($metadata['capacity'])) {
+            return trim(($metadata['plate'] ?? '').' - '.($metadata['capacity'] ?? ''), ' -');
         }
 
         if (! empty($metadata['template'])) {
@@ -225,7 +223,7 @@ class AuditLog extends Model
         return match (true) {
             $documentable instanceof User => $documentable->name,
             $documentable instanceof Employee => trim("{$documentable->first_name} {$documentable->last_name}"),
-            $documentable instanceof Vehicle => "{$documentable->brand_model} ({$documentable->plate})",
+            $documentable instanceof Vehicle => "{$documentable->plate} ({$documentable->capacity} posti)",
             default => 'Elemento eliminato',
         };
     }

@@ -17,12 +17,16 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(VehicleCapacitySeeder::class);
+
         User::query()->updateOrCreate(
             ['email' => 'admin@admin.com'],
             [
                 'name' => 'Admin',
                 'password' => 'password',
                 'role' => 'admin',
+                'approval_status' => 'approved',
+                'approved_at' => now(),
                 'responsible_name' => 'Amministratore',
             ],
         );
