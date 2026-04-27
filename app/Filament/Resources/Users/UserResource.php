@@ -118,7 +118,7 @@ class UserResource extends Resource
             ])
             ->recordActions([
                 Action::make('downloadApproved')
-                    ->label('ZIP approvati')
+                    ->label('ZIP documenti')
                     ->icon(Heroicon::OutlinedArrowDownTray)
                     ->color('gray')
                     ->visible(fn (User $record): bool => $record->role === 'company')

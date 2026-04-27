@@ -16,7 +16,7 @@ class EditUser extends EditRecord
     {
         return [
             Action::make('downloadAllApproved')
-                ->label('ZIP approvati')
+                ->label('ZIP documenti')
                 ->icon(Heroicon::OutlinedArrowDownTray)
                 ->color('gray')
                 ->visible(fn (): bool => $this->record->role === 'company')

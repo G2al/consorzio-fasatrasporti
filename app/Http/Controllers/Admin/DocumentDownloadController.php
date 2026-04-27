@@ -19,7 +19,6 @@ class DocumentDownloadController extends Controller
 {
     public function document(UploadedDocument $document): BinaryFileResponse
     {
-        abort_unless($document->status === 'approved', Response::HTTP_NOT_FOUND);
         abort_unless(Storage::disk('public')->exists($document->file_path), Response::HTTP_NOT_FOUND);
 
         return response()->download(
@@ -47,8 +46,9 @@ class DocumentDownloadController extends Controller
 
         return $this->zipResponse(
             $documents,
-            'documenti-approvati-'.$scopeLabel.'-'.$this->slug($company->name).'.zip',
+            'documenti-'.$scopeLabel.'-'.$this->slug($company->name).'.zip',
             fn (UploadedDocument $document): string => $this->companyZipPath($document, $scope),
+            'Nessun documento disponibile per il download.',
         );
     }
 
@@ -65,13 +65,13 @@ class DocumentDownloadController extends Controller
             $documents,
             'documenti-approvati-'.$this->slug($template->name).'.zip',
             fn (UploadedDocument $document): string => $this->templateZipPath($document),
+            'Nessun documento approvato disponibile per il download.',
         );
     }
 
     private function companyDocumentsQuery(User $company, string $scope): Builder
     {
         return UploadedDocument::query()
-            ->where('status', 'approved')
             ->where(function (Builder $query) use ($company, $scope): void {
                 if (in_array($scope, ['all', 'company'], true)) {
                     $query->orWhere(function (Builder $query) use ($company): void {
@@ -106,7 +106,7 @@ class DocumentDownloadController extends Controller
     /**
      * @param  iterable<UploadedDocument>  $documents
      */
-    private function zipResponse(iterable $documents, string $downloadName, callable $pathResolver): BinaryFileResponse
+    private function zipResponse(iterable $documents, string $downloadName, callable $pathResolver, string $emptyMessage): BinaryFileResponse
     {
         $exportDirectory = storage_path('app/private/exports');
 
@@ -134,7 +134,7 @@ class DocumentDownloadController extends Controller
 
         if ($added === []) {
             @unlink($zipPath);
-            abort(Response::HTTP_NOT_FOUND, 'Nessun documento approvato disponibile per il download.');
+            abort(Response::HTTP_NOT_FOUND, $emptyMessage);
         }
 
         return response()

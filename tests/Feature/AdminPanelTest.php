@@ -69,7 +69,7 @@ class AdminPanelTest extends TestCase
             ->assertOk();
     }
 
-    public function test_admin_can_download_approved_document_and_company_zip(): void
+    public function test_admin_can_download_documents_and_company_zip(): void
     {
         $this->seed();
         Storage::fake('public');
@@ -96,9 +96,8 @@ class AdminPanelTest extends TestCase
         $document = $company->documents()->create([
             'template_id' => $template->id,
             'file_path' => 'uploaded-documents/export-demo/durc.pdf',
-            'status' => 'approved',
+            'status' => 'pending',
             'has_expiry' => false,
-            'approved_at' => now(),
         ]);
 
         $this->actingAs($admin, 'admin')
@@ -111,11 +110,65 @@ class AdminPanelTest extends TestCase
             ->assertOk()
             ->assertDownload();
 
+        $document->forceFill([
+            'status' => 'approved',
+            'approved_at' => now(),
+        ])->save();
+
         $this->actingAs($admin, 'admin')
             ->get(route('admin.downloads.templates.show', $template))
             ->assertOk()
             ->assertDownload();
 
         UploadedDocument::query()->whereKey($document->id)->delete();
+    }
+
+    public function test_admin_can_open_template_companies_page(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $companyWithDocument = User::query()->create([
+            'name' => 'Societa Con Documento SRL',
+            'email' => 'with-document@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        User::query()->create([
+            'name' => 'Societa Mancante SRL',
+            'email' => 'missing-document@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        Storage::disk('public')->put('uploaded-documents/export-demo/template.pdf', 'PDF test');
+
+        $companyWithDocument->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/export-demo/template.pdf',
+            'status' => 'pending',
+            'has_expiry' => false,
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->get('/admin/document-templates/'.$template->id.'/societa')
+            ->assertOk()
+            ->assertSee('Societa Con Documento SRL')
+            ->assertSee('Societa Mancante SRL')
+            ->assertSee('In attesa')
+            ->assertSee('Mancante');
     }
 }

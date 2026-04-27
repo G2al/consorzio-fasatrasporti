@@ -105,7 +105,6 @@ class DocumentsRelationManager extends RelationManager
                 \Filament\Actions\Action::make('download')
                     ->label('Scarica')
                     ->icon(\Filament\Support\Icons\Heroicon::OutlinedArrowDownTray)
-                    ->visible(fn ($record): bool => $record->status === 'approved')
                     ->url(fn ($record): string => route('admin.downloads.documents.show', $record))
                     ->openUrlInNewTab(),
                 EditAction::make(),

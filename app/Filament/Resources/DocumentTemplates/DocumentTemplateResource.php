@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\DocumentTemplates;
 
 use App\Filament\Resources\DocumentTemplates\Pages\ManageDocumentTemplates;
+use App\Filament\Resources\DocumentTemplates\Pages\TemplateCompanies;
 use App\Models\DocumentTemplate;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -83,6 +84,11 @@ class DocumentTemplateResource extends Resource
                     ->relationship('section', 'name'),
             ])
             ->recordActions([
+                Action::make('companies')
+                    ->label('Societa')
+                    ->icon(Heroicon::OutlinedBuildingOffice)
+                    ->color('gray')
+                    ->url(fn (DocumentTemplate $record): string => static::getUrl('companies', ['record' => $record])),
                 Action::make('downloadApproved')
                     ->label('Scarica approvati')
                     ->icon(Heroicon::OutlinedArrowDownTray)
@@ -103,6 +109,7 @@ class DocumentTemplateResource extends Resource
     {
         return [
             'index' => ManageDocumentTemplates::route('/'),
+            'companies' => TemplateCompanies::route('/{record}/societa'),
         ];
     }
 }
