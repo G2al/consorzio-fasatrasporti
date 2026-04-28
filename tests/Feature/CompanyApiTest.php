@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AuditLog;
+use App\Models\DocumentExemption;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,6 +62,35 @@ class CompanyApiTest extends TestCase
             ->assertJsonCount(8, 'documents');
 
         $templateId = $documentsResponse->json('documents.0.template.id');
+        $exemptionTemplateId = $documentsResponse->json('documents.1.template.id');
+
+        $this->withToken($token)
+            ->postJson('/api/document-exemptions', [
+                'template_id' => $exemptionTemplateId,
+                'documentable_type' => 'employee',
+                'documentable_id' => $employeeId,
+                'requested_reason' => 'Non applicabile a questo dipendente.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('exemption.status', 'pending');
+
+        $this->withToken($token)
+            ->getJson("/api/employees/{$employeeId}/documents")
+            ->assertOk()
+            ->assertJsonPath('documents.1.status', 'exemption_pending');
+
+        DocumentExemption::query()
+            ->where('template_id', $exemptionTemplateId)
+            ->firstOrFail()
+            ->update([
+                'status' => 'approved',
+                'reviewed_at' => now(),
+            ]);
+
+        $this->withToken($token)
+            ->getJson("/api/employees/{$employeeId}/documents")
+            ->assertOk()
+            ->assertJsonCount(7, 'documents');
 
         $uploadResponse = $this->withToken($token)
             ->post('/api/documents', [

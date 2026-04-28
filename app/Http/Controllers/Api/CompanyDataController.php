@@ -49,6 +49,11 @@ class CompanyDataController extends Controller
             ->where('slug', 'societa')
             ->withCount('documentTemplates')
             ->value('document_templates_count') ?? 0;
+        $approvedExemptionsCount = $company->documentExemptions()
+            ->where('status', 'approved')
+            ->whereHas('template.section', fn ($query) => $query->where('slug', 'societa'))
+            ->count();
+        $requiredCount = max($requiredCount - $approvedExemptionsCount, 0);
 
         $documents = $company->documents()
             ->with(['template.section', 'documentable'])

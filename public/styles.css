@@ -912,6 +912,11 @@ select {
     color: var(--danger);
 }
 
+.status.exemption_pending {
+    background: #e8edf5;
+    color: #475569;
+}
+
 .status.expiry {
     min-width: 0;
 }
@@ -946,7 +951,8 @@ select {
     margin-bottom: 18px;
 }
 
-.upload-form {
+.upload-form,
+.exemption-form {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -956,7 +962,8 @@ select {
 }
 
 .upload-form .upload-progress,
-.upload-form .file-field {
+.upload-form .file-field,
+.exemption-form .field {
     grid-column: 1 / -1;
 }
 

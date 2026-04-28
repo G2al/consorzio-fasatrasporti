@@ -15,6 +15,7 @@
         pending: 'In attesa',
         approved: 'Approvato',
         rejected: 'Respinto',
+        exemption_pending: 'Esenzione in attesa',
     };
 
     function qs(selector, scope = document) {
@@ -578,6 +579,15 @@
             const upload = ['missing', 'rejected'].includes(status)
                 ? uploadForm(item.template.id, options.type, options.id)
                 : '';
+            const exemption = ['missing', 'rejected'].includes(status)
+                ? exemptionForm(item.template.id, options.type, options.id)
+                : '';
+            const exemptionNote = item.exemption?.admin_notes && item.exemption.status === 'rejected'
+                ? `<p class="meta">Esenzione rifiutata: ${escapeHtml(item.exemption.admin_notes)}</p>`
+                : '';
+            const pendingExemption = status === 'exemption_pending'
+                ? '<p class="meta">Richiesta inviata. Attendi conferma dell&apos;admin: se viene approvata, questo documento non sara piu richiesto.</p>'
+                : '';
 
             return `
                 <article class="document-card">
@@ -586,7 +596,10 @@
                         ${file}
                         ${dates}
                         ${note}
+                        ${exemptionNote}
+                        ${pendingExemption}
                         ${upload}
+                        ${exemption}
                     </div>
                     <div class="document-badges">
                         ${statusPill(status)}
@@ -614,6 +627,30 @@
                     await apiUpload('/documents', formData, (progress) => updateUploadProgress(form, progress));
                     documentCache.delete(options.endpoint || '');
                     showAlert('Documento caricato.', 'success');
+                    await options.refresh();
+                } catch (error) {
+                    showAlert(error.message);
+                } finally {
+                    setButtonLoading(button, false);
+                }
+            });
+        });
+
+        qsa('[data-exemption-form]', container).forEach((form) => {
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                hideAlert();
+
+                const button = qs('button[type="submit"]', form);
+                setButtonLoading(button, true, 'Invio richiesta...');
+
+                try {
+                    await api('/document-exemptions', {
+                        method: 'POST',
+                        body: Object.fromEntries(new FormData(form)),
+                    });
+                    documentCache.delete(options.endpoint || '');
+                    showAlert('Richiesta di esenzione inviata.', 'success');
                     await options.refresh();
                 } catch (error) {
                     showAlert(error.message);
@@ -651,6 +688,21 @@
                 </div>
                 <div class="upload-progress" data-upload-progress><span></span></div>
                 <button class="btn" type="submit" data-loading-text="Caricamento..."><span class="btn-content">${svg('upload')}Carica</span><span class="btn-loader" aria-hidden="true"></span></button>
+            </form>
+        `;
+    }
+
+    function exemptionForm(templateId, type, id) {
+        return `
+            <form class="exemption-form" data-exemption-form>
+                <input type="hidden" name="template_id" value="${templateId}">
+                <input type="hidden" name="documentable_type" value="${escapeHtml(type)}">
+                ${id ? `<input type="hidden" name="documentable_id" value="${escapeHtml(id)}">` : ''}
+                <div class="field">
+                    <label>Motivo esenzione</label>
+                    <textarea class="input" name="requested_reason" rows="2" placeholder="Facoltativo"></textarea>
+                </div>
+                <button class="btn secondary" type="submit" data-loading-text="Invio richiesta..."><span class="btn-content">Richiedi esenzione</span><span class="btn-loader" aria-hidden="true"></span></button>
             </form>
         `;
     }

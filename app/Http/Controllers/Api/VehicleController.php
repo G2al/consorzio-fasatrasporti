@@ -91,7 +91,10 @@ class VehicleController extends Controller
             'approved_documents_count' => $vehicle->approved_documents_count ?? $vehicle->documents()->where('status', 'approved')->count(),
             'pending_documents_count' => $vehicle->pending_documents_count ?? $vehicle->documents()->where('status', 'pending')->count(),
             'rejected_documents_count' => $vehicle->rejected_documents_count ?? $vehicle->documents()->where('status', 'rejected')->count(),
-            'required_documents_count' => $requiredDocumentsCount ?? $this->requiredDocumentsCount(),
+            'required_documents_count' => max(($requiredDocumentsCount ?? $this->requiredDocumentsCount()) - $vehicle->documentExemptions()
+                ->where('status', 'approved')
+                ->whereHas('template.section', fn ($query) => $query->where('slug', 'veicoli'))
+                ->count(), 0),
         ];
     }
 

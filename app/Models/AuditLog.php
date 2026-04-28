@@ -60,6 +60,10 @@ class AuditLog extends Model
             'document.uploaded' => 'Documento caricato',
             'document.approved' => 'Documento approvato',
             'document.rejected' => 'Documento respinto',
+            'document_exemption.requested' => 'Esenzione richiesta',
+            'document_exemption.approved' => 'Esenzione approvata',
+            'document_exemption.rejected' => 'Esenzione rifiutata',
+            'document_exemption.restored' => 'Esenzione ripristinata',
             default => str($action)->replace(['.', '_'], ' ')->headline()->toString(),
         };
     }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\DocumentExemption;
 use App\Models\DocumentTemplate;
 use App\Models\Employee;
 use App\Models\Section;
@@ -60,6 +61,8 @@ class DocumentController extends Controller
             $data['documentable_id'] ?? null,
         );
 
+        abort_if($this->approvedExemptionExists($documentable, $template), 422, 'Questo documento risulta esente e non puo essere caricato.');
+
         $document = $this->storeDocument(
             $documentable,
             $template,
@@ -77,6 +80,49 @@ class DocumentController extends Controller
 
         return response()->json([
             'document' => $this->uploadedDocumentPayload($document->fresh(['template'])),
+        ], 201);
+    }
+
+    public function requestExemption(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'template_id' => ['required', 'integer', 'exists:document_templates,id'],
+            'documentable_type' => ['required', 'string', 'in:company,employee,vehicle'],
+            'documentable_id' => ['nullable', 'integer'],
+            'requested_reason' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->with('section')
+            ->findOrFail($data['template_id']);
+
+        $this->assertTemplateMatchesType($template, $data['documentable_type']);
+
+        $documentable = $this->resolveDocumentable(
+            $request,
+            $data['documentable_type'],
+            $data['documentable_id'] ?? null,
+        );
+
+        $exemption = $documentable->documentExemptions()
+            ->updateOrCreate(
+                ['template_id' => $template->id],
+                [
+                    'status' => 'pending',
+                    'requested_reason' => $data['requested_reason'] ?? null,
+                    'admin_notes' => null,
+                    'reviewed_at' => null,
+                ],
+            );
+
+        AuditLog::record('document_exemption.requested', $exemption, 'Esenzione documento richiesta', [
+            'template' => $template->name,
+            'type' => $data['documentable_type'],
+            'reason' => $data['requested_reason'] ?? null,
+        ], actor: $request->user(), company: $request->user());
+
+        return response()->json([
+            'exemption' => $this->exemptionPayload($exemption->fresh(['template'])),
         ], 201);
     }
 
@@ -122,6 +168,11 @@ class DocumentController extends Controller
             ->get()
             ->keyBy('template_id');
 
+        $exemptions = $documentable->documentExemptions()
+            ->with('template')
+            ->get()
+            ->keyBy('template_id');
+
         return [
             'section' => [
                 'id' => $section->id,
@@ -129,8 +180,15 @@ class DocumentController extends Controller
                 'slug' => $section->slug,
             ],
             'documents' => $section->documentTemplates
-                ->map(function (DocumentTemplate $template) use ($uploadedDocuments): array {
+                ->filter(fn (DocumentTemplate $template): bool => ($exemptions->get($template->id)?->status ?? null) !== 'approved')
+                ->map(function (DocumentTemplate $template) use ($uploadedDocuments, $exemptions): array {
                     $document = $uploadedDocuments->get($template->id);
+                    $exemption = $exemptions->get($template->id);
+                    $status = $document?->status ?? 'missing';
+
+                    if ($exemption?->status === 'pending') {
+                        $status = 'exemption_pending';
+                    }
 
                     return [
                         'template' => [
@@ -140,11 +198,34 @@ class DocumentController extends Controller
                             'description' => $template->description,
                         ],
                         'uploaded_document' => $document ? $this->uploadedDocumentPayload($document) : null,
-                        'status' => $document?->status ?? 'missing',
+                        'exemption' => $exemption ? $this->exemptionPayload($exemption) : null,
+                        'status' => $status,
                     ];
                 })
                 ->values(),
         ];
+    }
+
+    private function exemptionPayload(DocumentExemption $exemption): array
+    {
+        return [
+            'id' => $exemption->id,
+            'template_id' => $exemption->template_id,
+            'status' => $exemption->status,
+            'requested_reason' => $exemption->requested_reason,
+            'admin_notes' => $exemption->admin_notes,
+            'reviewed_at' => $exemption->reviewed_at?->toIso8601String(),
+            'created_at' => $exemption->created_at?->toIso8601String(),
+            'updated_at' => $exemption->updated_at?->toIso8601String(),
+        ];
+    }
+
+    private function approvedExemptionExists(Model $documentable, DocumentTemplate $template): bool
+    {
+        return $documentable->documentExemptions()
+            ->where('template_id', $template->id)
+            ->where('status', 'approved')
+            ->exists();
     }
 
     private function uploadedDocumentPayload(UploadedDocument $document): array

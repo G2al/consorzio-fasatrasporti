@@ -27,6 +27,11 @@ class Vehicle extends Model
         return $this->morphMany(UploadedDocument::class, 'documentable');
     }
 
+    public function documentExemptions(): MorphMany
+    {
+        return $this->morphMany(DocumentExemption::class, 'exemptable');
+    }
+
     public function uploadedDocuments(): MorphMany
     {
         return $this->documents();
@@ -36,6 +41,7 @@ class Vehicle extends Model
     {
         static::deleting(function (Vehicle $vehicle): void {
             $vehicle->documents()->get()->each->delete();
+            $vehicle->documentExemptions()->delete();
         });
     }
 }

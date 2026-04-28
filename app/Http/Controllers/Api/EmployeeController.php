@@ -92,7 +92,10 @@ class EmployeeController extends Controller
             'approved_documents_count' => $employee->approved_documents_count ?? $employee->documents()->where('status', 'approved')->count(),
             'pending_documents_count' => $employee->pending_documents_count ?? $employee->documents()->where('status', 'pending')->count(),
             'rejected_documents_count' => $employee->rejected_documents_count ?? $employee->documents()->where('status', 'rejected')->count(),
-            'required_documents_count' => $requiredDocumentsCount ?? $this->requiredDocumentsCount(),
+            'required_documents_count' => max(($requiredDocumentsCount ?? $this->requiredDocumentsCount()) - $employee->documentExemptions()
+                ->where('status', 'approved')
+                ->whereHas('template.section', fn ($query) => $query->where('slug', 'dipendenti'))
+                ->count(), 0),
         ];
     }
 

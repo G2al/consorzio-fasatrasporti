@@ -28,6 +28,11 @@ class Employee extends Model
         return $this->morphMany(UploadedDocument::class, 'documentable');
     }
 
+    public function documentExemptions(): MorphMany
+    {
+        return $this->morphMany(DocumentExemption::class, 'exemptable');
+    }
+
     public function uploadedDocuments(): MorphMany
     {
         return $this->documents();
@@ -37,6 +42,7 @@ class Employee extends Model
     {
         static::deleting(function (Employee $employee): void {
             $employee->documents()->get()->each->delete();
+            $employee->documentExemptions()->delete();
         });
     }
 }

@@ -61,6 +61,11 @@ class User extends Authenticatable implements FilamentUser
         return $this->morphMany(UploadedDocument::class, 'documentable');
     }
 
+    public function documentExemptions(): MorphMany
+    {
+        return $this->morphMany(DocumentExemption::class, 'exemptable');
+    }
+
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class, 'company_id');
@@ -96,6 +101,7 @@ class User extends Authenticatable implements FilamentUser
 
         static::deleting(function (User $user): void {
             $user->documents()->get()->each->delete();
+            $user->documentExemptions()->delete();
             $user->employees()->get()->each->delete();
             $user->vehicles()->get()->each->delete();
         });
