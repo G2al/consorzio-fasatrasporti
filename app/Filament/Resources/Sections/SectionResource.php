@@ -34,6 +34,11 @@ class SectionResource extends Resource
 
     protected static ?string $pluralModelLabel = 'sezioni';
 
+    public static function canAccess(): bool
+    {
+        return auth('admin')->user()?->role === 'admin';
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema

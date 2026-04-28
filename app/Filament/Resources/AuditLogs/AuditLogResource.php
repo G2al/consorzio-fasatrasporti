@@ -29,6 +29,11 @@ class AuditLogResource extends Resource
 
     protected static ?string $pluralModelLabel = 'audit log';
 
+    public static function canAccess(): bool
+    {
+        return auth('admin')->user()?->role === 'admin';
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema;

@@ -41,6 +41,11 @@ class UserResource extends Resource
 
     protected static ?string $pluralModelLabel = 'società';
 
+    public static function canAccess(): bool
+    {
+        return in_array(auth('admin')->user()?->role, ['admin', 'reviewer'], true);
+    }
+
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->where('role', 'company');

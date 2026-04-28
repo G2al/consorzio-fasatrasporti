@@ -69,6 +69,83 @@ class AdminPanelTest extends TestCase
             ->assertOk();
     }
 
+    public function test_admin_can_manage_backend_users(): void
+    {
+        $this->seed();
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        User::query()->create([
+            'name' => 'Revisionatore Test',
+            'email' => 'reviewer@example.com',
+            'password' => 'Password1',
+            'role' => 'reviewer',
+            'approval_status' => 'approved',
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->get('/admin/admin-users')
+            ->assertOk()
+            ->assertSee('Revisionatore Test');
+    }
+
+    public function test_reviewer_can_open_only_allowed_resources(): void
+    {
+        $this->seed();
+
+        $reviewer = User::query()->create([
+            'name' => 'Revisionatore',
+            'email' => 'revisionatore@example.com',
+            'password' => 'Password1',
+            'role' => 'reviewer',
+            'approval_status' => 'approved',
+        ]);
+
+        $this->actingAs($reviewer, 'admin')
+            ->get('/admin/document-approvals')
+            ->assertOk();
+
+        $this->actingAs($reviewer, 'admin')
+            ->get('/admin/document-templates')
+            ->assertOk();
+
+        $this->actingAs($reviewer, 'admin')
+            ->get('/admin/users')
+            ->assertOk();
+
+        $this->actingAs($reviewer, 'admin')
+            ->get('/admin/audit-logs')
+            ->assertForbidden();
+
+        $this->actingAs($reviewer, 'admin')
+            ->get('/admin/sections')
+            ->assertForbidden();
+
+        $this->actingAs($reviewer, 'admin')
+            ->get('/admin/admin-users')
+            ->assertForbidden();
+    }
+
+    public function test_company_cannot_access_admin_panel(): void
+    {
+        $this->seed();
+
+        $company = User::query()->create([
+            'name' => 'Company Panel Block SRL',
+            'email' => 'company-panel-block@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $this->actingAs($company, 'admin')
+            ->get('/admin')
+            ->assertForbidden();
+    }
+
     public function test_admin_can_download_documents_and_company_zip(): void
     {
         $this->seed();

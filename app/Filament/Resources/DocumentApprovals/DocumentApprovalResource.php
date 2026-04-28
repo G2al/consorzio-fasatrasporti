@@ -50,6 +50,11 @@ class DocumentApprovalResource extends Resource
 
     protected static ?string $pluralModelLabel = 'documenti caricati';
 
+    public static function canAccess(): bool
+    {
+        return in_array(auth('admin')->user()?->role, ['admin', 'reviewer'], true);
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema
