@@ -75,6 +75,13 @@ class DocumentApprovalResource extends Resource
                     ->helperText('Se la data non e corretta, modificala senza respingere il documento.')
                     ->visible(fn (Get $get): bool => (bool) $get('has_expiry'))
                     ->required(fn (Get $get): bool => (bool) $get('has_expiry')),
+                TextInput::make('internal_expiry_name')
+                    ->label('Requisito interno')
+                    ->placeholder('Es. CQC')
+                    ->maxLength(255),
+                DatePicker::make('internal_expiry_date')
+                    ->label('Scadenza requisito')
+                    ->required(fn (Get $get): bool => filled($get('internal_expiry_name'))),
                 DateTimePicker::make('approved_at')
                     ->label('Data approvazione')
                     ->helperText('Compilata automaticamente dal pulsante Approva.'),
@@ -127,6 +134,11 @@ class DocumentApprovalResource extends Resource
                 TextColumn::make('expiry_date')
                     ->label('Scadenza')
                     ->date('d/m/Y')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('internal_expiry_date')
+                    ->label('Scad. requisito')
+                    ->date('d/m/Y')
+                    ->description(fn (UploadedDocument $record): ?string => $record->internal_expiry_name)
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('approved_at')
                     ->label('Approvato il')
@@ -285,6 +297,15 @@ class DocumentApprovalResource extends Resource
                                     ->label('Scadenza')
                                     ->visible(fn (Get $get): bool => $get('decision') === 'approve' && (bool) $get('has_expiry'))
                                     ->required(fn (Get $get): bool => $get('decision') === 'approve' && (bool) $get('has_expiry')),
+                                TextInput::make('internal_expiry_name')
+                                    ->label('Requisito interno')
+                                    ->helperText('Seconda scadenza opzionale dentro lo stesso documento, es. CQC.')
+                                    ->maxLength(255)
+                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve'),
+                                DatePicker::make('internal_expiry_date')
+                                    ->label('Scadenza requisito')
+                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve')
+                                    ->required(fn (Get $get): bool => $get('decision') === 'approve' && filled($get('internal_expiry_name'))),
                                 Textarea::make('admin_notes')
                                     ->label('Note di rifiuto')
                                     ->helperText('Usa il respingimento solo se il file e errato, incompleto o non pertinente.')
@@ -299,6 +320,8 @@ class DocumentApprovalResource extends Resource
                         'decision' => $record->status === 'rejected' ? 'reject' : 'approve',
                         'has_expiry' => $record->has_expiry,
                         'expiry_date' => $record->expiry_date,
+                        'internal_expiry_name' => $record->internal_expiry_name,
+                        'internal_expiry_date' => $record->internal_expiry_date,
                         'admin_notes' => $record->admin_notes,
                         'review_section' => $record->template->section?->name,
                         'review_template' => $record->template->name,
@@ -317,6 +340,8 @@ class DocumentApprovalResource extends Resource
                                 'status' => 'approved',
                                 'has_expiry' => (bool) ($data['has_expiry'] ?? false),
                                 'expiry_date' => ($data['has_expiry'] ?? false) ? ($data['expiry_date'] ?? null) : null,
+                                'internal_expiry_name' => filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_name'] : null,
+                                'internal_expiry_date' => filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_date'] : null,
                                 'approved_at' => now(),
                                 'admin_notes' => null,
                             ]);
@@ -324,6 +349,8 @@ class DocumentApprovalResource extends Resource
                             AuditLog::record('document.approved', $record->fresh(['template', 'documentable']), 'Documento approvato', [
                                 'template' => $record->template->name,
                                 'expiry_date' => $data['expiry_date'] ?? null,
+                                'internal_expiry_name' => $data['internal_expiry_name'] ?? null,
+                                'internal_expiry_date' => $data['internal_expiry_date'] ?? null,
                             ]);
 
                             Notification::make()

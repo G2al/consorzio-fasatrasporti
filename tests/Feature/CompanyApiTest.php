@@ -114,12 +114,16 @@ class CompanyApiTest extends TestCase
                 'documentable_id' => $employeeId,
                 'has_expiry' => '1',
                 'expiry_date' => '2030-01-01',
+                'internal_expiry_name' => 'CQC',
+                'internal_expiry_date' => '2030-06-01',
                 'file' => UploadedFile::fake()->create('documento.pdf', 24, 'application/pdf'),
             ])
             ->assertCreated()
             ->assertJsonPath('document.status', 'pending')
             ->assertJsonPath('document.has_expiry', true)
-            ->assertJsonPath('document.expiry_date', '2030-01-01');
+            ->assertJsonPath('document.expiry_date', '2030-01-01')
+            ->assertJsonPath('document.internal_expiry_name', 'CQC')
+            ->assertJsonPath('document.internal_expiry_date', '2030-06-01');
 
         $this->withHeaders(['Accept' => 'application/json'])
             ->withToken($token)
@@ -164,7 +168,13 @@ class CompanyApiTest extends TestCase
             ->assertJsonPath('employees.0.pending_documents_count', 1);
 
         $document = UploadedDocument::query()->findOrFail($secondUploadResponse->json('document.id'));
-        $document->update(['status' => 'approved', 'expiry_date' => '2030-01-01']);
+        $document->update([
+            'status' => 'approved',
+            'has_expiry' => true,
+            'expiry_date' => '2030-01-01',
+            'internal_expiry_name' => 'CQC',
+            'internal_expiry_date' => now()->addDays(10)->toDateString(),
+        ]);
 
         $this->assertNotNull($document->fresh()->approved_at);
         $this->withToken($token)
@@ -178,7 +188,7 @@ class CompanyApiTest extends TestCase
             ->getJson('/api/notifications')
             ->assertOk()
             ->assertJsonPath('unread_count', 1)
-            ->assertJsonPath('notifications.0.type', 'approved');
+            ->assertJsonPath('notifications.0.type', 'expiring');
 
         $notificationId = $notificationsResponse->json('notifications.0.id');
 

@@ -135,6 +135,10 @@ class AuditLog extends Model
             $parts[] = 'Scadenza: '.date('d/m/Y', strtotime((string) $metadata['expiry_date']));
         }
 
+        if (! empty($metadata['internal_expiry_name']) && ! empty($metadata['internal_expiry_date'])) {
+            $parts[] = $metadata['internal_expiry_name'].': '.date('d/m/Y', strtotime((string) $metadata['internal_expiry_date']));
+        }
+
         if (! empty($metadata['notes'])) {
             $parts[] = 'Note: '.$metadata['notes'];
         }

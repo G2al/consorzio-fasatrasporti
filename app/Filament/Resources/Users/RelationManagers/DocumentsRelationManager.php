@@ -12,6 +12,7 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Utilities\Get;
@@ -58,6 +59,13 @@ class DocumentsRelationManager extends RelationManager
                     ->label('Scadenza')
                     ->visible(fn (Get $get): bool => (bool) $get('has_expiry'))
                     ->required(fn (Get $get): bool => (bool) $get('has_expiry')),
+                TextInput::make('internal_expiry_name')
+                    ->label('Requisito interno')
+                    ->placeholder('Es. CQC')
+                    ->maxLength(255),
+                DatePicker::make('internal_expiry_date')
+                    ->label('Scadenza requisito')
+                    ->required(fn (Get $get): bool => filled($get('internal_expiry_name'))),
                 DateTimePicker::make('approved_at')
                     ->label('Data approvazione')
                     ->helperText('Se lo stato e approvato viene compilata automaticamente.'),
@@ -91,6 +99,10 @@ class DocumentsRelationManager extends RelationManager
                 TextColumn::make('expiry_date')
                     ->label('Scadenza')
                     ->date('d/m/Y'),
+                TextColumn::make('internal_expiry_date')
+                    ->label('Scad. requisito')
+                    ->date('d/m/Y')
+                    ->description(fn ($record): ?string => $record->internal_expiry_name),
                 TextColumn::make('approved_at')
                     ->label('Approvato il')
                     ->dateTime('d/m/Y H:i'),

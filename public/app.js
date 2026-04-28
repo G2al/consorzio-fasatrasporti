@@ -415,17 +415,17 @@
     }
 
     function expiryBadge(uploaded, status) {
-        if (status !== 'approved' || !uploaded?.expiry_date) {
+        if (status !== 'approved' || (!uploaded?.expiry_date && !uploaded?.internal_expiry_date)) {
             return '';
         }
 
-        const info = expiryInfo(uploaded.expiry_date);
-
-        if (!info) {
-            return '';
-        }
-
-        return `<span class="status expiry ${escapeHtml(info.tone)}">${escapeHtml(info.label)}</span>`;
+        return [
+            uploaded.expiry_date ? expiryInfo(uploaded.expiry_date) : null,
+            uploaded.internal_expiry_date ? expiryInfo(uploaded.internal_expiry_date) : null,
+        ]
+            .filter(Boolean)
+            .map((info) => `<span class="status expiry ${escapeHtml(info.tone)}">${escapeHtml(info.label)}</span>`)
+            .join('');
     }
 
     function documentMeta(uploaded, status) {
@@ -437,6 +437,7 @@
         const uploadedAt = formatDate(uploaded.created_at, true);
         const approvedAt = formatDate(uploaded.approved_at, true);
         const expiry = formatDate(uploaded.expiry_date);
+        const internalExpiry = formatDate(uploaded.internal_expiry_date);
 
         if (uploadedAt) {
             parts.push(`Caricato il ${uploadedAt}`);
@@ -447,7 +448,11 @@
         }
 
         if (status === 'approved' && expiry) {
-            parts.push(`Scadenza ${expiry}`);
+            parts.push(`Scadenza documento ${expiry}`);
+        }
+
+        if (status === 'approved' && internalExpiry) {
+            parts.push(`${uploaded.internal_expiry_name || 'Requisito interno'} ${internalExpiry}`);
         }
 
         if (!parts.length) {
@@ -613,6 +618,7 @@
         qsa('[data-upload-form]', container).forEach((form) => {
             bindFileInputs(form);
             bindExpiryToggle(form);
+            bindInternalExpiryToggle(form);
 
             form.addEventListener('submit', async (event) => {
                 event.preventDefault();
@@ -686,6 +692,21 @@
                     <label>Data scadenza</label>
                     <input class="input" type="date" name="expiry_date" data-expiry-date>
                 </div>
+                <div class="field">
+                    <label>Seconda scadenza</label>
+                    <select class="input" data-has-internal-expiry>
+                        <option value="0">No</option>
+                        <option value="1">Si, requisito interno</option>
+                    </select>
+                </div>
+                <div class="field" data-internal-expiry-field hidden>
+                    <label>Nome requisito</label>
+                    <input class="input" type="text" name="internal_expiry_name" maxlength="255" placeholder="Es. CQC" data-internal-expiry-name>
+                </div>
+                <div class="field" data-internal-expiry-field hidden>
+                    <label>Scadenza requisito</label>
+                    <input class="input" type="date" name="internal_expiry_date" data-internal-expiry-date>
+                </div>
                 <div class="upload-progress" data-upload-progress><span></span></div>
                 <button class="btn" type="submit" data-loading-text="Caricamento..."><span class="btn-content">${svg('upload')}Carica</span><span class="btn-loader" aria-hidden="true"></span></button>
             </form>
@@ -722,6 +743,34 @@
             dateInput.required = hasExpiry;
 
             if (!hasExpiry) {
+                dateInput.value = '';
+            }
+        };
+
+        select.addEventListener('change', sync);
+        sync();
+    }
+
+    function bindInternalExpiryToggle(form) {
+        const select = qs('[data-has-internal-expiry]', form);
+        const fields = qsa('[data-internal-expiry-field]', form);
+        const nameInput = qs('[data-internal-expiry-name]', form);
+        const dateInput = qs('[data-internal-expiry-date]', form);
+
+        if (!select || !fields.length || !nameInput || !dateInput) {
+            return;
+        }
+
+        const sync = () => {
+            const hasInternalExpiry = select.value === '1';
+            fields.forEach((field) => {
+                field.hidden = !hasInternalExpiry;
+            });
+            nameInput.required = hasInternalExpiry;
+            dateInput.required = hasInternalExpiry;
+
+            if (!hasInternalExpiry) {
+                nameInput.value = '';
                 dateInput.value = '';
             }
         };
@@ -1388,7 +1437,7 @@
                     <span class="entity-icon small">${svg('clock')}</span>
                     <span>
                         <strong>${escapeHtml(document.template)}</strong>
-                        <span class="meta">${escapeHtml(document.section)} &middot; ${escapeHtml(document.owner)}</span>
+                        <span class="meta">${escapeHtml(document.section)} &middot; ${escapeHtml(document.owner)}${document.label ? ` &middot; ${escapeHtml(document.label)}` : ''}</span>
                     </span>
                     <span class="status expiry ${escapeHtml(info?.tone || 'notice')}">${escapeHtml(info?.label || 'Scadenza impostata')}</span>
                 </article>
@@ -1421,8 +1470,9 @@
             return documents.filter((item) => {
                 const uploaded = item.uploaded_document;
                 const info = expiryInfo(uploaded?.expiry_date);
+                const internalInfo = expiryInfo(uploaded?.internal_expiry_date);
 
-                return item.status === 'approved' && info && info.days <= 60;
+                return item.status === 'approved' && ((info && info.days <= 60) || (internalInfo && internalInfo.days <= 60));
             });
         }
 

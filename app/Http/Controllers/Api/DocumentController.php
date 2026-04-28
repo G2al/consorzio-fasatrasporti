@@ -46,6 +46,8 @@ class DocumentController extends Controller
             'documentable_id' => ['nullable', 'integer'],
             'has_expiry' => ['required', 'boolean'],
             'expiry_date' => ['nullable', 'required_if:has_expiry,1,true,on', 'date'],
+            'internal_expiry_name' => ['nullable', 'required_with:internal_expiry_date', 'string', 'max:255'],
+            'internal_expiry_date' => ['nullable', 'required_with:internal_expiry_name', 'date'],
             'file' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:20480'],
         ]);
 
@@ -71,11 +73,15 @@ class DocumentController extends Controller
             $request->user()->id,
             $request->boolean('has_expiry'),
             $data['expiry_date'] ?? null,
+            $data['internal_expiry_name'] ?? null,
+            $data['internal_expiry_date'] ?? null,
         );
         AuditLog::record('document.uploaded', $document, 'Documento caricato', [
             'template' => $template->name,
             'type' => $data['documentable_type'],
             'expiry_date' => $data['expiry_date'] ?? null,
+            'internal_expiry_name' => $data['internal_expiry_name'] ?? null,
+            'internal_expiry_date' => $data['internal_expiry_date'] ?? null,
         ], actor: $request->user());
 
         return response()->json([
@@ -126,7 +132,7 @@ class DocumentController extends Controller
         ], 201);
     }
 
-    private function storeDocument(Model $documentable, DocumentTemplate $template, UploadedFile $file, string $type, int $companyId, bool $hasExpiry, ?string $expiryDate): UploadedDocument
+    private function storeDocument(Model $documentable, DocumentTemplate $template, UploadedFile $file, string $type, int $companyId, bool $hasExpiry, ?string $expiryDate, ?string $internalExpiryName, ?string $internalExpiryDate): UploadedDocument
     {
         $path = $file->store(
             "uploaded-documents/{$companyId}/{$type}",
@@ -143,6 +149,8 @@ class DocumentController extends Controller
             'status' => 'pending',
             'has_expiry' => $hasExpiry,
             'expiry_date' => $hasExpiry ? $expiryDate : null,
+            'internal_expiry_name' => filled($internalExpiryName) && filled($internalExpiryDate) ? $internalExpiryName : null,
+            'internal_expiry_date' => filled($internalExpiryName) && filled($internalExpiryDate) ? $internalExpiryDate : null,
             'approved_at' => null,
             'admin_notes' => null,
         ];
@@ -238,6 +246,8 @@ class DocumentController extends Controller
             'status' => $document->status,
             'has_expiry' => $document->has_expiry,
             'expiry_date' => $document->expiry_date?->toDateString(),
+            'internal_expiry_name' => $document->internal_expiry_name,
+            'internal_expiry_date' => $document->internal_expiry_date?->toDateString(),
             'approved_at' => $document->approved_at?->toIso8601String(),
             'admin_notes' => $document->admin_notes,
             'created_at' => $document->created_at?->toIso8601String(),

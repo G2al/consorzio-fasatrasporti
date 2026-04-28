@@ -19,8 +19,19 @@ class DocumentStatsOverview extends StatsOverviewWidget
     {
         $expiring = UploadedDocument::query()
             ->where('status', 'approved')
-            ->whereNotNull('expiry_date')
-            ->whereDate('expiry_date', '<=', now()->addDays(30))
+            ->where(function ($query): void {
+                $query
+                    ->where(function ($query): void {
+                        $query
+                            ->whereNotNull('expiry_date')
+                            ->whereDate('expiry_date', '<=', now()->addDays(30));
+                    })
+                    ->orWhere(function ($query): void {
+                        $query
+                            ->whereNotNull('internal_expiry_date')
+                            ->whereDate('internal_expiry_date', '<=', now()->addDays(30));
+                    });
+            })
             ->count();
 
         return [

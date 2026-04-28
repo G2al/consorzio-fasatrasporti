@@ -32,10 +32,16 @@ class ExpiringDocumentsWidget extends TableWidget
                     ->label('Societa / elemento')
                     ->formatStateUsing(fn (UploadedDocument $record): string => $this->documentableLabel($record)),
                 TextColumn::make('expiry_date')
-                    ->label('Scadenza')
+                    ->label('Scad. documento')
                     ->date('d/m/Y')
                     ->badge()
                     ->color(fn (UploadedDocument $record): string => $record->expiry_date?->isPast() ? 'danger' : 'warning'),
+                TextColumn::make('internal_expiry_date')
+                    ->label('Scad. requisito')
+                    ->date('d/m/Y')
+                    ->description(fn (UploadedDocument $record): ?string => $record->internal_expiry_name)
+                    ->badge()
+                    ->color(fn (UploadedDocument $record): string => $record->internal_expiry_date?->isPast() ? 'danger' : 'warning'),
             ]);
     }
 
@@ -44,9 +50,20 @@ class ExpiringDocumentsWidget extends TableWidget
         return UploadedDocument::query()
             ->with(['template.section', 'documentable'])
             ->where('status', 'approved')
-            ->whereNotNull('expiry_date')
-            ->whereDate('expiry_date', '<=', now()->addDays(60))
-            ->orderBy('expiry_date');
+            ->where(function (Builder $query): void {
+                $query
+                    ->where(function (Builder $query): void {
+                        $query
+                            ->whereNotNull('expiry_date')
+                            ->whereDate('expiry_date', '<=', now()->addDays(60));
+                    })
+                    ->orWhere(function (Builder $query): void {
+                        $query
+                            ->whereNotNull('internal_expiry_date')
+                            ->whereDate('internal_expiry_date', '<=', now()->addDays(60));
+                    });
+            })
+            ->orderByRaw('COALESCE(expiry_date, internal_expiry_date)');
     }
 
     private function documentableLabel(UploadedDocument $record): string

@@ -20,6 +20,8 @@ class UploadedDocument extends Model
         'status',
         'has_expiry',
         'expiry_date',
+        'internal_expiry_name',
+        'internal_expiry_date',
         'approved_at',
         'admin_notes',
     ];
@@ -28,6 +30,7 @@ class UploadedDocument extends Model
     {
         return [
             'expiry_date' => 'date',
+            'internal_expiry_date' => 'date',
             'has_expiry' => 'boolean',
             'approved_at' => 'datetime',
         ];
@@ -65,6 +68,11 @@ class UploadedDocument extends Model
         static::saving(function (UploadedDocument $document): void {
             if (! $document->has_expiry) {
                 $document->expiry_date = null;
+            }
+
+            if (blank($document->internal_expiry_name) || blank($document->internal_expiry_date)) {
+                $document->internal_expiry_name = null;
+                $document->internal_expiry_date = null;
             }
 
             if ($document->status === 'approved' && blank($document->approved_at)) {

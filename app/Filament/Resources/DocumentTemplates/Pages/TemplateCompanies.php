@@ -107,6 +107,11 @@ class TemplateCompanies extends Page implements HasTable
                     ->label('Scadenza')
                     ->date('d/m/Y')
                     ->placeholder('-'),
+                TextColumn::make('template_document_internal_expiry_date')
+                    ->label('Scad. requisito')
+                    ->date('d/m/Y')
+                    ->description(fn (User $record): ?string => $record->template_document_internal_expiry_name)
+                    ->placeholder('-'),
                 TextColumn::make('template_document_updated_at')
                     ->label('Aggiornato')
                     ->dateTime('d/m/Y H:i')
@@ -146,6 +151,8 @@ class TemplateCompanies extends Page implements HasTable
                 'template_document_id' => $this->templateDocumentSubquery('id'),
                 'template_document_status' => $this->templateDocumentSubquery('status'),
                 'template_document_expiry_date' => $this->templateDocumentSubquery('expiry_date'),
+                'template_document_internal_expiry_name' => $this->templateDocumentSubquery('internal_expiry_name'),
+                'template_document_internal_expiry_date' => $this->templateDocumentSubquery('internal_expiry_date'),
                 'template_document_updated_at' => $this->templateDocumentSubquery('updated_at'),
                 'template_exemption_status' => $this->templateExemptionSubquery('status'),
             ]);

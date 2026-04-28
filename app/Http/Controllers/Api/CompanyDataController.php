@@ -68,9 +68,7 @@ class CompanyDataController extends Controller
         $expiryLimit = now()->addDays(60)->endOfDay();
 
         $expiringDocuments = $documents
-            ->filter(fn (UploadedDocument $document): bool => $document->status === 'approved'
-                && filled($document->expiry_date)
-                && $document->expiry_date->lessThanOrEqualTo($expiryLimit))
+            ->flatMap(fn (UploadedDocument $document): array => $this->documentDeadlinePayloads($document, $expiryLimit, $today))
             ->sortBy('expiry_date')
             ->values();
 
@@ -88,16 +86,6 @@ class CompanyDataController extends Controller
             ],
             'expiring_documents' => $expiringDocuments
                 ->take(8)
-                ->map(fn (UploadedDocument $document): array => [
-                    'id' => $document->id,
-                    'template' => $document->template->name,
-                    'section' => $document->template->section->name,
-                    'owner' => $this->documentableLabel($document),
-                    'expiry_date' => $document->expiry_date?->toDateString(),
-                    'days_remaining' => $document->expiry_date
-                        ? (int) $today->diffInDays($document->expiry_date->copy()->startOfDay(), false)
-                        : null,
-                ])
                 ->values(),
         ]);
     }
@@ -195,33 +183,17 @@ class CompanyDataController extends Controller
             ));
 
         $expiring = $documents
-            ->filter(fn (UploadedDocument $document): bool => $document->status === 'approved'
-                && filled($document->expiry_date)
-                && $document->expiry_date->lessThanOrEqualTo($expiryLimit))
+            ->flatMap(fn (UploadedDocument $document): array => $this->documentDeadlinePayloads($document, $expiryLimit, $today))
             ->sortBy('expiry_date')
             ->take(6)
-            ->map(function (UploadedDocument $document) use ($today): array {
-                $days = (int) $today->diffInDays($document->expiry_date->copy()->startOfDay(), false);
-
-                return $this->notificationPayload(
-                    $document,
-                    $days < 0 ? 'expired' : 'expiring',
-                    $days < 0 ? 'Documento scaduto' : 'Documento in scadenza',
-                    $document->template->name.' - '.$this->documentableLabel($document),
-                    $days < 0
-                        ? 'Scaduto il '.$document->expiry_date->format('d/m/Y')
-                        : 'Scade il '.$document->expiry_date->format('d/m/Y').' ('.$days.' giorni)',
-                    $document->expiry_date?->toDateString(),
-                    2,
-                    true,
-                );
-            });
+            ->map(fn (array $deadline): array => $this->deadlineNotificationPayload($deadline));
 
         $approved = $documents
             ->filter(fn (UploadedDocument $document): bool => $document->status === 'approved'
                 && filled($document->approved_at)
                 && $document->approved_at->greaterThanOrEqualTo(now()->subDays(14))
-                && (blank($document->expiry_date) || $document->expiry_date->greaterThan($expiryLimit)))
+                && (blank($document->expiry_date) || $document->expiry_date->greaterThan($expiryLimit))
+                && (blank($document->internal_expiry_date) || $document->internal_expiry_date->greaterThan($expiryLimit)))
             ->sortByDesc('approved_at')
             ->take(5)
             ->map(fn (UploadedDocument $document): array => $this->notificationPayload(
@@ -326,6 +298,76 @@ class CompanyDataController extends Controller
             $documentable instanceof Vehicle => "{$documentable->plate} ({$documentable->capacity} posti)",
             default => 'Elemento eliminato',
         };
+    }
+
+    private function documentDeadlinePayloads(UploadedDocument $document, $expiryLimit, $today): array
+    {
+        if ($document->status !== 'approved') {
+            return [];
+        }
+
+        $deadlines = [];
+
+        if (filled($document->expiry_date) && $document->expiry_date->lessThanOrEqualTo($expiryLimit)) {
+            $deadlines[] = $this->documentDeadlinePayload(
+                $document,
+                'document',
+                'Scadenza documento',
+                $document->expiry_date,
+                $today,
+            );
+        }
+
+        if (filled($document->internal_expiry_date) && $document->internal_expiry_date->lessThanOrEqualTo($expiryLimit)) {
+            $deadlines[] = $this->documentDeadlinePayload(
+                $document,
+                'internal',
+                $document->internal_expiry_name ?: 'Requisito interno',
+                $document->internal_expiry_date,
+                $today,
+            );
+        }
+
+        return $deadlines;
+    }
+
+    private function documentDeadlinePayload(UploadedDocument $document, string $kind, string $label, $date, $today): array
+    {
+        return [
+            'id' => $document->id.'-'.$kind,
+            'document_id' => $document->id,
+            'kind' => $kind,
+            'label' => $label,
+            'template' => $document->template->name,
+            'section' => $document->template->section->name,
+            'owner' => $this->documentableLabel($document),
+            'expiry_date' => $date?->toDateString(),
+            'days_remaining' => $date ? (int) $today->diffInDays($date->copy()->startOfDay(), false) : null,
+            'target' => $this->notificationTarget($document),
+        ];
+    }
+
+    private function deadlineNotificationPayload(array $deadline): array
+    {
+        $days = (int) $deadline['days_remaining'];
+        $date = $deadline['expiry_date'];
+        $body = $days < 0
+            ? $deadline['label'].' scaduta il '.date('d/m/Y', strtotime($date))
+            : $deadline['label'].' scade il '.date('d/m/Y', strtotime($date)).' ('.$days.' giorni)';
+        $versionKey = substr(sha1($date.'|'.$deadline['kind'].'|'.$body), 0, 12);
+
+        return [
+            'id' => ($days < 0 ? 'expired' : 'expiring').'-'.$deadline['document_id'].'-'.$deadline['kind'].'-'.$versionKey,
+            'type' => $days < 0 ? 'expired' : 'expiring',
+            'title' => $days < 0 ? 'Scadenza superata' : 'Scadenza vicina',
+            'subtitle' => $deadline['template'].' - '.$deadline['owner'],
+            'body' => $body,
+            'date' => $date,
+            'target' => $deadline['target'],
+            'is_urgent' => true,
+            'priority' => 2,
+            'sort_date' => $date,
+        ];
     }
 
     private function exemptionLabel(DocumentExemption $exemption): string
