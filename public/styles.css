@@ -754,7 +754,7 @@ select {
 .entity-list,
 .document-list {
     display: grid;
-    gap: 12px;
+    gap: 14px;
 }
 
 .entity-card,
@@ -854,14 +854,68 @@ select {
 }
 
 .document-card {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 16px;
+    position: relative;
+    display: block;
     min-width: 0;
-    padding: 16px;
+    overflow: hidden;
+    padding: 0;
+    border-color: rgba(144, 160, 154, 0.36);
+    box-shadow: 0 10px 26px rgba(27, 37, 36, 0.07);
 }
 
-.document-card > div {
+.document-card::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: #cbd5d2;
+    content: "";
+}
+
+.document-card.is-missing::before,
+.document-card.is-rejected::before {
+    background: #d14b3f;
+}
+
+.document-card.is-pending::before {
+    background: #d99518;
+}
+
+.document-card.is-approved::before {
+    background: #2c8b57;
+}
+
+.document-card.is-exemption_pending::before {
+    background: #64748b;
+}
+
+.document-card-main {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+    padding: 18px 18px 18px 22px;
+}
+
+.document-card-header {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: start;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.document-card-header:focus-visible {
+    outline: 2px solid rgba(25, 107, 105, 0.28);
+    outline-offset: 4px;
+    border-radius: 8px;
+}
+
+.document-heading {
     min-width: 0;
 }
 
@@ -873,6 +927,21 @@ select {
     gap: 8px;
 }
 
+.document-card-body {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+
+.document-card-details {
+    display: none;
+    gap: 14px;
+}
+
+.document-card-details.is-open {
+    display: grid;
+}
+
 .document-title,
 .entity-title {
     margin: 0;
@@ -880,11 +949,82 @@ select {
     font-weight: 650;
 }
 
+.document-title {
+    font-size: 18px;
+    line-height: 1.25;
+}
+
 .meta {
     margin: 6px 0 0;
     color: var(--muted);
     font-size: 14px;
     overflow-wrap: anywhere;
+}
+
+.document-note {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #fff7e6;
+    color: #7a4a00;
+    font-size: 14px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.document-note.danger {
+    background: #fff0f0;
+    color: #9f2d24;
+}
+
+.document-note.neutral {
+    background: #eef3f8;
+    color: #475569;
+}
+
+.document-file-link {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary);
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.document-file-link:hover {
+    text-decoration: underline;
+}
+
+.document-toggle {
+    display: inline-flex;
+    min-width: 56px;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #eef5f4;
+    color: var(--primary);
+    padding: 0 10px;
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.document-card-header[aria-expanded="true"] .document-toggle {
+    background: #dff2f0;
+}
+
+.document-card-header[aria-expanded="true"] .document-toggle::before {
+    content: "Chiudi";
+}
+
+.document-card-header[aria-expanded="true"] .document-toggle {
+    font-size: 0;
+}
+
+.document-card-header[aria-expanded="true"] .document-toggle::before {
+    font-size: 13px;
 }
 
 .status {
@@ -960,12 +1100,21 @@ select {
 
 .upload-form,
 .exemption-form {
-    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 10px;
     align-items: end;
-    margin-top: 12px;
+    min-width: 0;
+    margin: 0;
+}
+
+.document-actions {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid rgba(144, 160, 154, 0.24);
+    border-radius: 8px;
+    background: #f8faf9;
 }
 
 .upload-form .upload-progress,
@@ -1890,6 +2039,14 @@ select {
 
     .document-badges {
         justify-content: flex-start;
+    }
+
+    .document-card-header {
+        grid-template-columns: 1fr;
+    }
+
+    .document-card-main {
+        padding: 16px 14px 16px 19px;
     }
 
     .auth-panel {

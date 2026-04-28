@@ -575,10 +575,10 @@
             const uploaded = item.uploaded_document;
             const status = item.status || 'missing';
             const note = uploaded?.admin_notes
-                ? `<p class="meta">Note: ${escapeHtml(uploaded.admin_notes)}</p>`
+                ? `<p class="document-note">Note: ${escapeHtml(uploaded.admin_notes)}</p>`
                 : '';
             const file = uploaded?.file_url
-                ? `<p class="meta"><a href="${escapeHtml(uploaded.file_url)}" target="_blank" rel="noreferrer">Apri file</a></p>`
+                ? `<a class="document-file-link" href="${escapeHtml(uploaded.file_url)}" target="_blank" rel="noreferrer">${svg('file')}Apri file</a>`
                 : '';
             const dates = documentMeta(uploaded, status);
             const upload = ['missing', 'rejected'].includes(status)
@@ -588,32 +588,56 @@
                 ? exemptionForm(item.template.id, options.type, options.id)
                 : '';
             const exemptionNote = item.exemption?.admin_notes && item.exemption.status === 'rejected'
-                ? `<p class="meta">Esenzione rifiutata: ${escapeHtml(item.exemption.admin_notes)}</p>`
+                ? `<p class="document-note danger">Esenzione rifiutata: ${escapeHtml(item.exemption.admin_notes)}</p>`
                 : '';
             const pendingExemption = status === 'exemption_pending'
-                ? '<p class="meta">Richiesta inviata. Attendi conferma dell&apos;admin: se viene approvata, questo documento non sara piu richiesto.</p>'
+                ? '<p class="document-note neutral">Richiesta inviata. Attendi conferma dell&apos;admin: se viene approvata, questo documento non sara piu richiesto.</p>'
                 : '';
+            const hasAction = Boolean(upload || exemption);
 
             return `
-                <article class="document-card">
-                    <div>
-                        <h3 class="document-title">${escapeHtml(item.template.name)}</h3>
-                        ${file}
-                        ${dates}
-                        ${note}
-                        ${exemptionNote}
-                        ${pendingExemption}
-                        ${upload}
-                        ${exemption}
-                    </div>
-                    <div class="document-badges">
-                        ${statusPill(status)}
-                        ${expiryBadge(uploaded, status)}
+                <article class="document-card is-${escapeHtml(status)}">
+                    <div class="document-card-main">
+                        <button class="document-card-header" type="button" data-toggle-document-card aria-expanded="${hasAction ? 'true' : 'false'}">
+                            <div class="document-heading">
+                                <h3 class="document-title">${escapeHtml(item.template.name)}</h3>
+                                ${dates}
+                            </div>
+                            <div class="document-badges">
+                                ${statusPill(status)}
+                                ${expiryBadge(uploaded, status)}
+                                <span class="document-toggle" aria-hidden="true">Apri</span>
+                            </div>
+                        </button>
+                        <div class="document-card-details ${hasAction ? 'is-open' : ''}">
+                            <div class="document-card-body">
+                            ${file}
+                            ${note}
+                            ${exemptionNote}
+                            ${pendingExemption}
+                            </div>
+                            ${hasAction ? `
+                                <div class="document-actions">
+                                    ${upload}
+                                    ${exemption}
+                                </div>
+                            ` : ''}
+                        </div>
                     </div>
                 </article>
             `;
         }).join('')}
         `;
+
+        qsa('[data-toggle-document-card]', container).forEach((button) => {
+            const details = qs('.document-card-details', button.closest('.document-card'));
+
+            button.addEventListener('click', () => {
+                const isOpen = !details?.classList.contains('is-open');
+                details?.classList.toggle('is-open', isOpen);
+                button.setAttribute('aria-expanded', String(isOpen));
+            });
+        });
 
         qsa('[data-upload-form]', container).forEach((form) => {
             bindFileInputs(form);
