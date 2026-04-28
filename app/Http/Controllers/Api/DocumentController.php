@@ -48,7 +48,7 @@ class DocumentController extends Controller
             'expiry_date' => ['nullable', 'required_if:has_expiry,1,true,on', 'date'],
             'internal_expiry_name' => ['nullable', 'required_with:internal_expiry_date', 'string', 'max:255'],
             'internal_expiry_date' => ['nullable', 'required_with:internal_expiry_name', 'date'],
-            'file' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:20480'],
+            'file' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:'.config('services.documents.upload_max_kb')],
         ]);
 
         $template = DocumentTemplate::query()

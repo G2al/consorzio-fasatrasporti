@@ -44,6 +44,7 @@ return [
 
     'documents' => [
         'rejection_mail_enabled' => env('DOCUMENT_REJECTION_MAIL_ENABLED', true),
+        'upload_max_kb' => env('DOCUMENT_UPLOAD_MAX_KB', 51200),
     ],
 
 ];
