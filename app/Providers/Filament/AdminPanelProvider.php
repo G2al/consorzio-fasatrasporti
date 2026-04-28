@@ -32,7 +32,7 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->favicon(asset('images/favicon_consorzio.png'))
             ->brandLogo(asset('images/logo_consorzio_white_trimmed.png'))
-            ->brandLogoHeight('8rem')
+            ->brandLogoHeight('5rem')
             ->colors([
                 'primary' => Color::Amber,
             ])
