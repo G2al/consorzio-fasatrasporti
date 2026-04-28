@@ -371,7 +371,7 @@ class DocumentApprovalResource extends Resource
                         $record->loadMissing(['template', 'documentable']);
                         $company = $record->companyUser();
 
-                        if ($company?->email) {
+                        if (config('services.documents.rejection_mail_enabled') && $company?->email) {
                             Mail::to($company->email)->send(new DocumentRejectedMail($record));
                         }
 

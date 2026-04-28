@@ -7,6 +7,7 @@ use App\Models\DocumentTemplate;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -38,6 +39,22 @@ class AdminPanelTest extends TestCase
         $this->actingAs($admin, 'admin')
             ->get('/admin/document-approvals')
             ->assertOk();
+    }
+
+    public function test_document_rejection_mail_can_be_disabled(): void
+    {
+        config(['services.documents.rejection_mail_enabled' => false]);
+        Mail::fake();
+
+        $company = User::factory()->make([
+            'email' => 'company@example.com',
+        ]);
+
+        if (config('services.documents.rejection_mail_enabled') && $company->email) {
+            Mail::to($company->email)->send(new \App\Mail\DocumentRejectedMail(new UploadedDocument()));
+        }
+
+        Mail::assertNothingSent();
     }
 
     public function test_admin_can_open_document_exemptions_resource(): void

@@ -42,4 +42,8 @@ return [
         'allow_during_tests' => env('TELEGRAM_ALLOW_DURING_TESTS', false),
     ],
 
+    'documents' => [
+        'rejection_mail_enabled' => env('DOCUMENT_REJECTION_MAIL_ENABLED', true),
+    ],
+
 ];
