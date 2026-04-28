@@ -34,4 +34,11 @@ class DocumentTemplate extends Model
     {
         return $this->hasMany(UploadedDocument::class, 'template_id');
     }
+
+    public function subtemplates(): HasMany
+    {
+        return $this->hasMany(DocumentSubtemplate::class, 'template_id')
+            ->orderBy('sort_order')
+            ->orderBy('name');
+    }
 }

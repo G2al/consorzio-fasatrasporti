@@ -36,6 +36,12 @@ class DocumentsRelationManager extends RelationManager
                     ->required()
                     ->preload()
                     ->searchable(),
+                Select::make('subtemplate_id')
+                    ->label('Sottodocumento')
+                    ->relationship('subtemplate', 'name')
+                    ->helperText('Lascia vuoto per caricare il documento principale.')
+                    ->preload()
+                    ->searchable(),
                 FileUpload::make('file_path')
                     ->label('File')
                     ->disk('public')
@@ -82,7 +88,8 @@ class DocumentsRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('template.name')
                     ->label('Documento')
-                    ->searchable(),
+                    ->searchable()
+                    ->description(fn ($record): ?string => $record->subtemplate?->name ? 'Sottodocumento: '.$record->subtemplate->name : null),
                 TextColumn::make('status')
                     ->label('Stato')
                     ->badge()

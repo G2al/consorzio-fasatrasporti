@@ -20,7 +20,7 @@
 </head>
 <body style="margin:0;background:#eef3f1;color:#172422;font-family:Arial,Helvetica,sans-serif;line-height:1.55;">
     <div style="display:none;max-height:0;overflow:hidden;color:#eef3f1;">
-        Il documento {{ $document->template->name }} e stato respinto. Consulta le note e carica una versione corretta.
+        Il documento {{ $documentName }} e stato respinto. Consulta le note e carica una versione corretta.
     </div>
 
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f1;margin:0;padding:28px 12px;">
@@ -54,7 +54,7 @@
                                 <tr>
                                     <td style="background:#f8faf8;padding:18px 20px;border-bottom:1px solid #dbe7e2;">
                                         <div style="font-size:12px;color:#6a7d78;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">Scheda documento</div>
-                                        <div style="margin-top:5px;font-size:20px;color:#172422;font-weight:700;">{{ $document->template->name }}</div>
+                                        <div style="margin-top:5px;font-size:20px;color:#172422;font-weight:700;">{{ $documentName }}</div>
                                     </td>
                                 </tr>
                                 <tr>

@@ -20,7 +20,7 @@ class DocumentRejectedMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Documento respinto - '.$this->document->template->name,
+            subject: 'Documento respinto - '.$this->documentName(),
         );
     }
 
@@ -28,6 +28,16 @@ class DocumentRejectedMail extends Mailable
     {
         return new Content(
             view: 'emails.documents.rejected',
+            with: [
+                'documentName' => $this->documentName(),
+            ],
         );
+    }
+
+    private function documentName(): string
+    {
+        return $this->document->subtemplate
+            ? $this->document->template->name.' / '.$this->document->subtemplate->name
+            : $this->document->template->name;
     }
 }

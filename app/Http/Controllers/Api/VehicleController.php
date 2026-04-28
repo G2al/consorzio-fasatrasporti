@@ -93,6 +93,7 @@ class VehicleController extends Controller
             'rejected_documents_count' => $vehicle->rejected_documents_count ?? $vehicle->documents()->where('status', 'rejected')->count(),
             'required_documents_count' => max(($requiredDocumentsCount ?? $this->requiredDocumentsCount()) - $vehicle->documentExemptions()
                 ->where('status', 'approved')
+                ->whereNull('subtemplate_id')
                 ->whereHas('template.section', fn ($query) => $query->where('slug', 'veicoli'))
                 ->count(), 0),
         ];
@@ -122,4 +123,5 @@ class VehicleController extends Controller
             ->pluck('seats')
             ->all() ?: VehicleCapacity::VALUES;
     }
+
 }

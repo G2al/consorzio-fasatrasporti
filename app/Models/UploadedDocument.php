@@ -14,6 +14,7 @@ class UploadedDocument extends Model
 
     protected $fillable = [
         'template_id',
+        'subtemplate_id',
         'documentable_id',
         'documentable_type',
         'file_path',
@@ -41,6 +42,11 @@ class UploadedDocument extends Model
         return $this->belongsTo(DocumentTemplate::class, 'template_id');
     }
 
+    public function subtemplate(): BelongsTo
+    {
+        return $this->belongsTo(DocumentSubtemplate::class, 'subtemplate_id');
+    }
+
     public function documentable(): MorphTo
     {
         return $this->morphTo();
@@ -66,6 +72,13 @@ class UploadedDocument extends Model
     protected static function booted(): void
     {
         static::saving(function (UploadedDocument $document): void {
+            if (filled($document->subtemplate_id)) {
+                $document->has_expiry = false;
+                $document->expiry_date = null;
+                $document->internal_expiry_name = null;
+                $document->internal_expiry_date = null;
+            }
+
             if (! $document->has_expiry) {
                 $document->expiry_date = null;
             }

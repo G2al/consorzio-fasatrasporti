@@ -19,7 +19,7 @@ class CompanyDataController extends Controller
     public function sections(): JsonResponse
     {
         $sections = Section::query()
-            ->with(['documentTemplates' => fn ($query) => $query->orderBy('name')])
+            ->with(['documentTemplates' => fn ($query) => $query->with('subtemplates')->orderBy('name')])
             ->orderBy('id')
             ->get()
             ->map(fn (Section $section): array => [
@@ -31,6 +31,12 @@ class CompanyDataController extends Controller
                     'name' => $template->name,
                     'is_required' => $template->is_required,
                     'description' => $template->description,
+                    'subtemplates' => $template->subtemplates->map(fn ($subtemplate): array => [
+                        'id' => $subtemplate->id,
+                        'name' => $subtemplate->name,
+                        'is_required' => $subtemplate->is_required,
+                        'description' => $subtemplate->description,
+                    ])->values(),
                 ])->values(),
             ]);
 
@@ -52,12 +58,13 @@ class CompanyDataController extends Controller
             ->value('document_templates_count') ?? 0;
         $approvedExemptionsCount = $company->documentExemptions()
             ->where('status', 'approved')
+            ->whereNull('subtemplate_id')
             ->whereHas('template.section', fn ($query) => $query->where('slug', 'societa'))
             ->count();
         $requiredCount = max($requiredCount - $approvedExemptionsCount, 0);
 
         $documents = $company->documents()
-            ->with(['template.section', 'documentable'])
+            ->with(['template.section', 'subtemplate', 'documentable'])
             ->whereHas('template.section', fn ($query) => $query->where('slug', 'societa'))
             ->get();
 
@@ -160,11 +167,11 @@ class CompanyDataController extends Controller
         $expiryLimit = now()->addDays(30)->endOfDay();
 
         $documents = $this->companyDocumentsQuery($company)
-            ->with(['template.section', 'documentable'])
+            ->with(['template.section', 'subtemplate', 'documentable'])
             ->get();
 
         $exemptions = $this->companyExemptionsQuery($company)
-            ->with(['template.section', 'exemptable'])
+            ->with(['template.section', 'subtemplate', 'exemptable'])
             ->get();
 
         $rejected = $documents
@@ -175,7 +182,7 @@ class CompanyDataController extends Controller
                 $document,
                 'rejected',
                 'Documento respinto',
-                $document->template->name.' - '.$this->documentableLabel($document),
+                $this->documentName($document).' - '.$this->documentableLabel($document),
                 $document->admin_notes ?: 'Controlla le note e carica una nuova versione.',
                 $document->updated_at?->toIso8601String(),
                 3,
@@ -200,7 +207,7 @@ class CompanyDataController extends Controller
                 $document,
                 'approved',
                 'Documento approvato',
-                $document->template->name.' - '.$this->documentableLabel($document),
+                $this->documentName($document).' - '.$this->documentableLabel($document),
                 'Approvato il '.$document->approved_at->format('d/m/Y H:i'),
                 $document->approved_at?->toIso8601String(),
                 1,
@@ -338,7 +345,7 @@ class CompanyDataController extends Controller
             'document_id' => $document->id,
             'kind' => $kind,
             'label' => $label,
-            'template' => $document->template->name,
+            'template' => $this->documentName($document),
             'section' => $document->template->section->name,
             'owner' => $this->documentableLabel($document),
             'expiry_date' => $date?->toDateString(),
@@ -415,7 +422,7 @@ class CompanyDataController extends Controller
             'id' => $type.'-'.$exemption->id.'-'.$versionKey,
             'type' => $type,
             'title' => $title,
-            'subtitle' => $exemption->template->name.' - '.$this->exemptionLabel($exemption),
+            'subtitle' => $this->exemptionName($exemption).' - '.$this->exemptionLabel($exemption),
             'body' => $body,
             'date' => $date,
             'target' => $this->exemptionNotificationTarget($exemption),
@@ -469,5 +476,19 @@ class CompanyDataController extends Controller
             Vehicle::class => 'veicoli.html',
             default => 'index.html',
         };
+    }
+
+    private function documentName(UploadedDocument $document): string
+    {
+        return $document->subtemplate
+            ? $document->template->name.' / '.$document->subtemplate->name
+            : $document->template->name;
+    }
+
+    private function exemptionName(DocumentExemption $exemption): string
+    {
+        return $exemption->subtemplate
+            ? $exemption->template->name.' / '.$exemption->subtemplate->name
+            : $exemption->template->name;
     }
 }

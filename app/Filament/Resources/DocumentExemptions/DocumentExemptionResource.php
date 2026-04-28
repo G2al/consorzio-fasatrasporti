@@ -52,6 +52,7 @@ class DocumentExemptionResource extends Resource
         return parent::getEloquentQuery()
             ->with([
                 'template.section',
+                'subtemplate',
                 'exemptable' => fn (MorphTo $morphTo): MorphTo => $morphTo->morphWith([
                     Employee::class => ['user'],
                     Vehicle::class => ['user'],
@@ -69,7 +70,8 @@ class DocumentExemptionResource extends Resource
                     ->badge(),
                 TextColumn::make('template.name')
                     ->label('Documento')
-                    ->searchable(),
+                    ->searchable()
+                    ->description(fn (DocumentExemption $record): ?string => $record->subtemplate?->name ? 'Sottodocumento: '.$record->subtemplate->name : null),
                 TextColumn::make('company_display')
                     ->label('Societa / elemento')
                     ->state(fn (DocumentExemption $record): string => static::companyLabel($record))
@@ -127,6 +129,7 @@ class DocumentExemptionResource extends Resource
 
                         AuditLog::record('document_exemption.approved', $record->fresh(['template', 'exemptable']), 'Esenzione documento approvata', [
                             'template' => $record->template->name,
+                            'subtemplate' => $record->subtemplate?->name,
                         ]);
 
                         Notification::make()
@@ -154,6 +157,7 @@ class DocumentExemptionResource extends Resource
 
                         AuditLog::record('document_exemption.rejected', $record->fresh(['template', 'exemptable']), 'Esenzione documento rifiutata', [
                             'template' => $record->template->name,
+                            'subtemplate' => $record->subtemplate?->name,
                             'notes' => $data['admin_notes'],
                         ]);
 
@@ -171,6 +175,7 @@ class DocumentExemptionResource extends Resource
                     ->action(function (DocumentExemption $record): void {
                         AuditLog::record('document_exemption.restored', $record, 'Esenzione documento ripristinata', [
                             'template' => $record->template->name,
+                            'subtemplate' => $record->subtemplate?->name,
                         ]);
 
                         $record->delete();

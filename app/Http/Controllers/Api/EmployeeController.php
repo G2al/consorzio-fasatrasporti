@@ -94,6 +94,7 @@ class EmployeeController extends Controller
             'rejected_documents_count' => $employee->rejected_documents_count ?? $employee->documents()->where('status', 'rejected')->count(),
             'required_documents_count' => max(($requiredDocumentsCount ?? $this->requiredDocumentsCount()) - $employee->documentExemptions()
                 ->where('status', 'approved')
+                ->whereNull('subtemplate_id')
                 ->whereHas('template.section', fn ($query) => $query->where('slug', 'dipendenti'))
                 ->count(), 0),
         ];

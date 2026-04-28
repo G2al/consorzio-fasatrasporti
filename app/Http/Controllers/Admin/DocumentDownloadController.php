@@ -33,8 +33,9 @@ class DocumentDownloadController extends Controller
         abort_unless(in_array($scope, ['all', 'company', 'employees', 'vehicles'], true), Response::HTTP_NOT_FOUND);
 
         $documents = $this->companyDocumentsQuery($company, $scope)
-            ->with(['template.section', 'documentable'])
+            ->with(['template.section', 'subtemplate', 'documentable'])
             ->orderBy('template_id')
+            ->orderBy('subtemplate_id')
             ->get();
 
         $scopeLabel = match ($scope) {
@@ -57,7 +58,7 @@ class DocumentDownloadController extends Controller
         $documents = UploadedDocument::query()
             ->where('template_id', $template->id)
             ->where('status', 'approved')
-            ->with(['template.section', 'documentable'])
+            ->with(['template.section', 'subtemplate', 'documentable'])
             ->latest('approved_at')
             ->get();
 
@@ -188,6 +189,7 @@ class DocumentDownloadController extends Controller
         $extension = pathinfo($document->file_path, PATHINFO_EXTENSION);
         $parts = array_filter([
             $document->template?->name,
+            $document->subtemplate?->name,
             $this->documentOwnerLabel($document),
             $document->approved_at?->format('Ymd') ?: $document->updated_at?->format('Ymd'),
         ]);

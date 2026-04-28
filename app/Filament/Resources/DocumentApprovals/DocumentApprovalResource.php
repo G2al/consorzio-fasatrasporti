@@ -31,6 +31,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\HtmlString;
 
@@ -96,6 +97,7 @@ class DocumentApprovalResource extends Resource
         return parent::getEloquentQuery()
             ->with([
                 'template.section',
+                'subtemplate',
                 'documentable' => fn (MorphTo $morphTo): MorphTo => $morphTo->morphWith([
                     Employee::class => ['user'],
                     Vehicle::class => ['user'],
@@ -113,7 +115,8 @@ class DocumentApprovalResource extends Resource
                     ->badge(),
                 TextColumn::make('template.name')
                     ->label('Documento')
-                    ->searchable(),
+                    ->searchable()
+                    ->description(fn (UploadedDocument $record): ?string => $record->subtemplate?->name ? 'Sottodocumento: '.$record->subtemplate->name : null),
                 TextColumn::make('company_display')
                     ->label('Società / elemento')
                     ->state(fn (UploadedDocument $record): string => static::companyLabel($record))
@@ -234,7 +237,7 @@ class DocumentApprovalResource extends Resource
                     ->icon(Heroicon::OutlinedEye)
                     ->iconButton()
                     ->color('primary')
-                    ->modalHeading(fn (UploadedDocument $record): string => 'Revisione: '.$record->template->name)
+                    ->modalHeading(fn (UploadedDocument $record): string => 'Revisione: '.static::documentName($record))
                     ->modalDescription(fn (UploadedDocument $record): string => static::documentableLabel($record))
                     ->modalWidth('7xl')
                     ->modalSubmitActionLabel('Salva decisione')
@@ -292,20 +295,20 @@ class DocumentApprovalResource extends Resource
                                     ->label('Il documento ha scadenza')
                                     ->helperText('Se la data non e corretta, modificala e approva.')
                                     ->live()
-                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve'),
+                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id)),
                                 DatePicker::make('expiry_date')
                                     ->label('Scadenza')
-                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve' && (bool) $get('has_expiry'))
-                                    ->required(fn (Get $get): bool => $get('decision') === 'approve' && (bool) $get('has_expiry')),
+                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && (bool) $get('has_expiry'))
+                                    ->required(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && (bool) $get('has_expiry')),
                                 TextInput::make('internal_expiry_name')
                                     ->label('Requisito interno')
                                     ->helperText('Seconda scadenza opzionale dentro lo stesso documento, es. CQC.')
                                     ->maxLength(255)
-                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve'),
+                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id)),
                                 DatePicker::make('internal_expiry_date')
                                     ->label('Scadenza requisito')
-                                    ->visible(fn (Get $get): bool => $get('decision') === 'approve')
-                                    ->required(fn (Get $get): bool => $get('decision') === 'approve' && filled($get('internal_expiry_name'))),
+                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id))
+                                    ->required(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && filled($get('internal_expiry_name'))),
                                 Textarea::make('admin_notes')
                                     ->label('Note di rifiuto')
                                     ->helperText('Usa il respingimento solo se il file e errato, incompleto o non pertinente.')
@@ -324,7 +327,7 @@ class DocumentApprovalResource extends Resource
                         'internal_expiry_date' => $record->internal_expiry_date,
                         'admin_notes' => $record->admin_notes,
                         'review_section' => $record->template->section?->name,
-                        'review_template' => $record->template->name,
+                        'review_template' => static::documentName($record),
                         'review_owner' => static::documentableLabel($record),
                         'review_status' => match ($record->status) {
                             'approved' => 'Approvato',
@@ -336,18 +339,21 @@ class DocumentApprovalResource extends Resource
                     ])
                     ->action(function (UploadedDocument $record, array $data): void {
                         if (($data['decision'] ?? null) === 'approve') {
+                            $hasExpiry = blank($record->subtemplate_id) && (bool) ($data['has_expiry'] ?? false);
+
                             $record->update([
                                 'status' => 'approved',
-                                'has_expiry' => (bool) ($data['has_expiry'] ?? false),
-                                'expiry_date' => ($data['has_expiry'] ?? false) ? ($data['expiry_date'] ?? null) : null,
-                                'internal_expiry_name' => filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_name'] : null,
-                                'internal_expiry_date' => filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_date'] : null,
+                                'has_expiry' => $hasExpiry,
+                                'expiry_date' => $hasExpiry ? ($data['expiry_date'] ?? null) : null,
+                                'internal_expiry_name' => blank($record->subtemplate_id) && filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_name'] : null,
+                                'internal_expiry_date' => blank($record->subtemplate_id) && filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_date'] : null,
                                 'approved_at' => now(),
                                 'admin_notes' => null,
                             ]);
 
-                            AuditLog::record('document.approved', $record->fresh(['template', 'documentable']), 'Documento approvato', [
+                            AuditLog::record('document.approved', $record->fresh(['template', 'subtemplate', 'documentable']), 'Documento approvato', [
                                 'template' => $record->template->name,
+                                'subtemplate' => $record->subtemplate?->name,
                                 'expiry_date' => $data['expiry_date'] ?? null,
                                 'internal_expiry_name' => $data['internal_expiry_name'] ?? null,
                                 'internal_expiry_date' => $data['internal_expiry_date'] ?? null,
@@ -355,7 +361,7 @@ class DocumentApprovalResource extends Resource
 
                             Notification::make()
                                 ->title('Documento approvato')
-                                ->body($record->template->name.' e stato approvato correttamente.')
+                                ->body(static::documentName($record).' e stato approvato correttamente.')
                                 ->success()
                                 ->send();
 
@@ -368,21 +374,37 @@ class DocumentApprovalResource extends Resource
                             'admin_notes' => $data['admin_notes'],
                         ]);
 
-                        $record->loadMissing(['template', 'documentable']);
+                        $record->loadMissing(['template', 'subtemplate', 'documentable']);
                         $company = $record->companyUser();
 
                         if (config('services.documents.rejection_mail_enabled') && $company?->email) {
-                            Mail::to($company->email)->send(new DocumentRejectedMail($record));
+                            try {
+                                Mail::to($company->email)->send(new DocumentRejectedMail($record));
+                            } catch (\Throwable $exception) {
+                                Log::warning('Document rejection email failed.', [
+                                    'document_id' => $record->id,
+                                    'company_id' => $company->id,
+                                    'company_email' => $company->email,
+                                    'error' => $exception->getMessage(),
+                                ]);
+
+                                Notification::make()
+                                    ->title('Documento respinto, ma email non inviata')
+                                    ->body('Controlla la configurazione SMTP della casella email.')
+                                    ->warning()
+                                    ->send();
+                            }
                         }
 
-                        AuditLog::record('document.rejected', $record->fresh(['template', 'documentable']), 'Documento respinto', [
+                        AuditLog::record('document.rejected', $record->fresh(['template', 'subtemplate', 'documentable']), 'Documento respinto', [
                             'template' => $record->template->name,
+                            'subtemplate' => $record->subtemplate?->name,
                             'notes' => $data['admin_notes'],
                         ]);
 
                         Notification::make()
                             ->title('Documento respinto')
-                            ->body($record->template->name.' e stato respinto correttamente.')
+                            ->body(static::documentName($record).' e stato respinto correttamente.')
                             ->danger()
                             ->send();
                     }),
@@ -399,6 +421,13 @@ class DocumentApprovalResource extends Resource
             $documentable instanceof \App\Models\Vehicle => "{$documentable->plate} ({$documentable->capacity} posti)",
             default => 'Elemento eliminato',
         };
+    }
+
+    protected static function documentName(UploadedDocument $record): string
+    {
+        return $record->subtemplate
+            ? $record->template->name.' / '.$record->subtemplate->name
+            : $record->template->name;
     }
 
     protected static function companyLabel(UploadedDocument $record): string
@@ -426,7 +455,7 @@ class DocumentApprovalResource extends Resource
 
     protected static function historyContent(UploadedDocument $record): HtmlString
     {
-        $record->loadMissing(['template.section', 'documentable']);
+        $record->loadMissing(['template.section', 'subtemplate', 'documentable']);
         $logs = AuditLog::query()
             ->where('auditable_type', UploadedDocument::class)
             ->where('auditable_id', $record->id)
@@ -441,7 +470,7 @@ class DocumentApprovalResource extends Resource
             <div class="space-y-5">
                 <div>
                     <h3 class="text-sm font-semibold">Documento corrente</h3>
-                    <p class="text-sm text-gray-600">'.e($record->template->name).' - '.e(static::documentableLabel($record)).'</p>
+                    <p class="text-sm text-gray-600">'.e(static::documentName($record)).' - '.e(static::documentableLabel($record)).'</p>
                     <p class="text-sm"><a href="'.e($record->file_url).'" target="_blank">Apri file corrente</a></p>
                 </div>
                 <div>

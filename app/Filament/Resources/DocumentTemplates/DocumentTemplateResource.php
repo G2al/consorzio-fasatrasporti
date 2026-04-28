@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\DocumentTemplates;
 
+use App\Filament\Resources\DocumentTemplates\Pages\EditDocumentTemplate;
 use App\Filament\Resources\DocumentTemplates\Pages\ManageDocumentTemplates;
 use App\Filament\Resources\DocumentTemplates\Pages\TemplateCompanies;
+use App\Filament\Resources\DocumentTemplates\RelationManagers\SubtemplatesRelationManager;
 use App\Models\DocumentTemplate;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -89,6 +91,8 @@ class DocumentTemplateResource extends Resource
                     ->relationship('section', 'name'),
             ])
             ->recordActions([
+                EditAction::make()
+                    ->label('Modifica'),
                 Action::make('companies')
                     ->label('Societa')
                     ->icon(Heroicon::OutlinedBuildingOffice)
@@ -100,7 +104,6 @@ class DocumentTemplateResource extends Resource
                     ->color('gray')
                     ->url(fn (DocumentTemplate $record): string => route('admin.downloads.templates.show', $record))
                     ->openUrlInNewTab(),
-                EditAction::make(),
                 DeleteAction::make(),
             ])
             ->toolbarActions([
@@ -114,7 +117,15 @@ class DocumentTemplateResource extends Resource
     {
         return [
             'index' => ManageDocumentTemplates::route('/'),
+            'edit' => EditDocumentTemplate::route('/{record}/edit'),
             'companies' => TemplateCompanies::route('/{record}/societa'),
+        ];
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            SubtemplatesRelationManager::class,
         ];
     }
 }

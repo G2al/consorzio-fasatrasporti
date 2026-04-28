@@ -13,6 +13,7 @@ class DocumentExemption extends Model
 
     protected $fillable = [
         'template_id',
+        'subtemplate_id',
         'exemptable_id',
         'exemptable_type',
         'status',
@@ -31,6 +32,11 @@ class DocumentExemption extends Model
     public function template(): BelongsTo
     {
         return $this->belongsTo(DocumentTemplate::class, 'template_id');
+    }
+
+    public function subtemplate(): BelongsTo
+    {
+        return $this->belongsTo(DocumentSubtemplate::class, 'subtemplate_id');
     }
 
     public function exemptable(): MorphTo

@@ -582,11 +582,70 @@
                 : '';
             const dates = documentMeta(uploaded, status);
             const upload = ['missing', 'rejected'].includes(status)
-                ? uploadForm(item.template.id, options.type, options.id)
+                ? uploadForm(item.template.id, null, options.type, options.id, true)
                 : '';
             const exemption = ['missing', 'rejected'].includes(status)
-                ? exemptionForm(item.template.id, options.type, options.id)
+                ? exemptionForm(item.template.id, null, options.type, options.id)
                 : '';
+            const subdocuments = item.subdocuments || [];
+            const subdocumentsHtml = subdocuments.length ? `
+                <div class="subdocument-list">
+                    <div class="subdocument-list-title">Sottodocumenti</div>
+                    ${subdocuments.map((subitem) => {
+                        const subUploaded = subitem.uploaded_document;
+                        const subStatus = subitem.status || 'missing';
+                        const subNote = subUploaded?.admin_notes
+                            ? `<p class="document-note">Note: ${escapeHtml(subUploaded.admin_notes)}</p>`
+                            : '';
+                        const subFile = subUploaded?.file_url
+                            ? `<a class="document-file-link" href="${escapeHtml(subUploaded.file_url)}" target="_blank" rel="noreferrer">${svg('file')}Apri file</a>`
+                            : '';
+                        const subUpload = ['missing', 'rejected'].includes(subStatus)
+                            ? uploadForm(item.template.id, subitem.subtemplate.id, options.type, options.id, false)
+                            : '';
+                        const subExemption = ['missing', 'rejected'].includes(subStatus)
+                            ? exemptionForm(item.template.id, subitem.subtemplate.id, options.type, options.id)
+                            : '';
+                        const subExemptionNote = subitem.exemption?.admin_notes && subitem.exemption.status === 'rejected'
+                            ? `<p class="document-note danger">Esenzione rifiutata: ${escapeHtml(subitem.exemption.admin_notes)}</p>`
+                            : '';
+                        const subPendingExemption = subStatus === 'exemption_pending'
+                            ? '<p class="document-note neutral">Richiesta inviata. Attendi conferma dell&apos;admin.</p>'
+                            : '';
+                        const subDescription = subitem.subtemplate.description
+                            ? `<p class="subdocument-description">${escapeHtml(subitem.subtemplate.description)}</p>`
+                            : '';
+                        const hasSubAction = Boolean(subUpload || subExemption);
+
+                        return `
+                            <div class="subdocument-item is-${escapeHtml(subStatus)}">
+                                <div class="subdocument-header">
+                                    <div>
+                                        <strong>${escapeHtml(subitem.subtemplate.name)}</strong>
+                                        <span class="optional-chip">Opzionale</span>
+                                        ${subDescription}
+                                    </div>
+                                    ${statusPill(subStatus)}
+                                </div>
+                                ${subFile || subNote || subExemptionNote || subPendingExemption ? `
+                                    <div class="subdocument-body">
+                                        ${subFile}
+                                        ${subNote}
+                                        ${subExemptionNote}
+                                        ${subPendingExemption}
+                                    </div>
+                                ` : ''}
+                                ${hasSubAction ? `
+                                    <div class="document-actions subdocument-actions">
+                                        ${subUpload}
+                                        ${subExemption}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            ` : '';
             const exemptionNote = item.exemption?.admin_notes && item.exemption.status === 'rejected'
                 ? `<p class="document-note danger">Esenzione rifiutata: ${escapeHtml(item.exemption.admin_notes)}</p>`
                 : '';
@@ -615,6 +674,7 @@
                             ${note}
                             ${exemptionNote}
                             ${pendingExemption}
+                            ${subdocumentsHtml}
                             </div>
                             ${hasAction ? `
                                 <div class="document-actions">
@@ -691,10 +751,11 @@
         });
     }
 
-    function uploadForm(templateId, type, id) {
+    function uploadForm(templateId, subtemplateId, type, id, allowExpiry = true) {
         return `
             <form class="upload-form" data-upload-form>
                 <input type="hidden" name="template_id" value="${templateId}">
+                ${subtemplateId ? `<input type="hidden" name="subtemplate_id" value="${subtemplateId}">` : ''}
                 <input type="hidden" name="documentable_type" value="${escapeHtml(type)}">
                 ${id ? `<input type="hidden" name="documentable_id" value="${escapeHtml(id)}">` : ''}
                 <div class="field file-field">
@@ -705,42 +766,45 @@
                         <span data-file-name>Trascina qui o seleziona PDF/DOC</span>
                     </label>
                 </div>
-                <div class="field">
-                    <label>Scadenza documento</label>
-                    <select class="input" name="has_expiry" data-has-expiry required>
-                        <option value="0">No, non ha scadenza</option>
-                        <option value="1">Si, ha scadenza</option>
-                    </select>
-                </div>
-                <div class="field" data-expiry-date-field hidden>
-                    <label>Data scadenza</label>
-                    <input class="input" type="date" name="expiry_date" data-expiry-date>
-                </div>
-                <div class="field">
-                    <label>Seconda scadenza</label>
-                    <select class="input" data-has-internal-expiry>
-                        <option value="0">No</option>
-                        <option value="1">Si, requisito interno</option>
-                    </select>
-                </div>
-                <div class="field" data-internal-expiry-field hidden>
-                    <label>Nome requisito</label>
-                    <input class="input" type="text" name="internal_expiry_name" maxlength="255" placeholder="Es. CQC" data-internal-expiry-name>
-                </div>
-                <div class="field" data-internal-expiry-field hidden>
-                    <label>Scadenza requisito</label>
-                    <input class="input" type="date" name="internal_expiry_date" data-internal-expiry-date>
-                </div>
+                ${allowExpiry ? `
+                    <div class="field">
+                        <label>Scadenza documento</label>
+                        <select class="input" name="has_expiry" data-has-expiry required>
+                            <option value="0">No, non ha scadenza</option>
+                            <option value="1">Si, ha scadenza</option>
+                        </select>
+                    </div>
+                    <div class="field" data-expiry-date-field hidden>
+                        <label>Data scadenza</label>
+                        <input class="input" type="date" name="expiry_date" data-expiry-date>
+                    </div>
+                    <div class="field">
+                        <label>Seconda scadenza</label>
+                        <select class="input" data-has-internal-expiry>
+                            <option value="0">No</option>
+                            <option value="1">Si, requisito interno</option>
+                        </select>
+                    </div>
+                    <div class="field" data-internal-expiry-field hidden>
+                        <label>Nome requisito</label>
+                        <input class="input" type="text" name="internal_expiry_name" maxlength="255" placeholder="Es. CQC" data-internal-expiry-name>
+                    </div>
+                    <div class="field" data-internal-expiry-field hidden>
+                        <label>Scadenza requisito</label>
+                        <input class="input" type="date" name="internal_expiry_date" data-internal-expiry-date>
+                    </div>
+                ` : '<input type="hidden" name="has_expiry" value="0">'}
                 <div class="upload-progress" data-upload-progress><span></span></div>
                 <button class="btn" type="submit" data-loading-text="Caricamento..."><span class="btn-content">${svg('upload')}Carica</span><span class="btn-loader" aria-hidden="true"></span></button>
             </form>
         `;
     }
 
-    function exemptionForm(templateId, type, id) {
+    function exemptionForm(templateId, subtemplateId, type, id) {
         return `
             <form class="exemption-form" data-exemption-form>
                 <input type="hidden" name="template_id" value="${templateId}">
+                ${subtemplateId ? `<input type="hidden" name="subtemplate_id" value="${subtemplateId}">` : ''}
                 <input type="hidden" name="documentable_type" value="${escapeHtml(type)}">
                 ${id ? `<input type="hidden" name="documentable_id" value="${escapeHtml(id)}">` : ''}
                 <div class="field">
@@ -1500,7 +1564,8 @@
             });
         }
 
-        return documents.filter((item) => (item.status || 'missing') === filter);
+        return documents.filter((item) => (item.status || 'missing') === filter
+            || (item.subdocuments || []).some((subitem) => (subitem.status || 'missing') === filter));
     }
 
     async function initEmployees() {

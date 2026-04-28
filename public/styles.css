@@ -1117,6 +1117,90 @@ select {
     background: #f8faf9;
 }
 
+.subdocument-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.subdocument-list-title {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 750;
+    text-transform: uppercase;
+}
+
+.subdocument-item {
+    display: grid;
+    gap: 10px;
+    border: 1px solid rgba(144, 160, 154, 0.28);
+    border-left: 4px solid #9aa8a4;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 12px;
+}
+
+.subdocument-item.is-missing,
+.subdocument-item.is-rejected {
+    border-left-color: #d14b3f;
+}
+
+.subdocument-item.is-pending {
+    border-left-color: #d99518;
+}
+
+.subdocument-item.is-approved {
+    border-left-color: #2c8b57;
+}
+
+.subdocument-item.is-exemption_pending {
+    border-left-color: #64748b;
+}
+
+.subdocument-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+}
+
+.subdocument-header strong {
+    display: inline;
+    overflow-wrap: anywhere;
+    font-size: 15px;
+}
+
+.optional-chip {
+    display: inline-flex;
+    height: 24px;
+    align-items: center;
+    border-radius: 999px;
+    background: #eef5f4;
+    color: var(--primary);
+    padding: 0 9px;
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 750;
+    vertical-align: middle;
+}
+
+.subdocument-description {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.subdocument-body {
+    display: grid;
+    gap: 8px;
+}
+
+.subdocument-actions {
+    padding: 12px;
+    background: #fbfcfb;
+}
+
 .upload-form .upload-progress,
 .upload-form .file-field,
 .exemption-form .field {
