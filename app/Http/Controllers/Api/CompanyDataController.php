@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CompanyNotificationDismissal;
+use App\Models\DocumentExemption;
 use App\Models\Employee;
 use App\Models\Section;
 use App\Models\UploadedDocument;
@@ -174,6 +175,10 @@ class CompanyDataController extends Controller
             ->with(['template.section', 'documentable'])
             ->get();
 
+        $exemptions = $this->companyExemptionsQuery($company)
+            ->with(['template.section', 'exemptable'])
+            ->get();
+
         $rejected = $documents
             ->where('status', 'rejected')
             ->sortByDesc('updated_at')
@@ -230,9 +235,16 @@ class CompanyDataController extends Controller
                 false,
             ));
 
+        $exemptionNotifications = $exemptions
+            ->filter(fn (DocumentExemption $exemption): bool => in_array($exemption->status, ['pending', 'approved', 'rejected'], true))
+            ->sortByDesc('updated_at')
+            ->take(8)
+            ->map(fn (DocumentExemption $exemption): array => $this->exemptionNotificationPayload($exemption));
+
         return $rejected
             ->concat($expiring)
             ->concat($approved)
+            ->concat($exemptionNotifications)
             ->sortByDesc(fn (array $item): string => sprintf('%02d-%s', $item['priority'], $item['sort_date'] ?? ''))
             ->take(12)
             ->values();
@@ -277,6 +289,33 @@ class CompanyDataController extends Controller
             });
     }
 
+    private function companyExemptionsQuery(User $company)
+    {
+        return DocumentExemption::query()
+            ->where(function ($query) use ($company): void {
+                $query
+                    ->where(function ($query) use ($company): void {
+                        $query
+                            ->where('exemptable_type', User::class)
+                            ->where('exemptable_id', $company->id);
+                    })
+                    ->orWhere(function ($query) use ($company): void {
+                        $query
+                            ->where('exemptable_type', Employee::class)
+                            ->whereIn('exemptable_id', Employee::query()
+                                ->select('id')
+                                ->where('user_id', $company->id));
+                    })
+                    ->orWhere(function ($query) use ($company): void {
+                        $query
+                            ->where('exemptable_type', Vehicle::class)
+                            ->whereIn('exemptable_id', Vehicle::query()
+                                ->select('id')
+                                ->where('user_id', $company->id));
+                    });
+            });
+    }
+
     private function documentableLabel(UploadedDocument $document): string
     {
         $documentable = $document->documentable;
@@ -287,6 +326,61 @@ class CompanyDataController extends Controller
             $documentable instanceof Vehicle => "{$documentable->plate} ({$documentable->capacity} posti)",
             default => 'Elemento eliminato',
         };
+    }
+
+    private function exemptionLabel(DocumentExemption $exemption): string
+    {
+        $exemptable = $exemption->exemptable;
+
+        return match (true) {
+            $exemptable instanceof User => $exemptable->name,
+            $exemptable instanceof Employee => trim("{$exemptable->first_name} {$exemptable->last_name}"),
+            $exemptable instanceof Vehicle => "{$exemptable->plate} ({$exemptable->capacity} posti)",
+            default => 'Elemento eliminato',
+        };
+    }
+
+    private function exemptionNotificationPayload(DocumentExemption $exemption): array
+    {
+        [$type, $title, $body, $priority, $isUrgent] = match ($exemption->status) {
+            'approved' => [
+                'exemption_approved',
+                'Esenzione approvata',
+                'Il documento non e piu richiesto.',
+                2,
+                false,
+            ],
+            'rejected' => [
+                'exemption_rejected',
+                'Esenzione rifiutata',
+                $exemption->admin_notes ?: 'La richiesta non e stata accettata. Carica il documento richiesto.',
+                3,
+                true,
+            ],
+            default => [
+                'exemption_pending',
+                'Esenzione in attesa',
+                'La richiesta e in attesa di verifica da parte dell admin.',
+                1,
+                false,
+            ],
+        };
+
+        $date = ($exemption->reviewed_at ?: $exemption->updated_at)?->toIso8601String();
+        $versionKey = substr(sha1($date.'|'.$body.'|'.$exemption->status), 0, 12);
+
+        return [
+            'id' => $type.'-'.$exemption->id.'-'.$versionKey,
+            'type' => $type,
+            'title' => $title,
+            'subtitle' => $exemption->template->name.' - '.$this->exemptionLabel($exemption),
+            'body' => $body,
+            'date' => $date,
+            'target' => $this->exemptionNotificationTarget($exemption),
+            'is_urgent' => $isUrgent,
+            'priority' => $priority,
+            'sort_date' => $date,
+        ];
     }
 
     private function notificationPayload(
@@ -318,6 +412,16 @@ class CompanyDataController extends Controller
     private function notificationTarget(UploadedDocument $document): string
     {
         return match ($document->documentable_type) {
+            User::class => 'index.html',
+            Employee::class => 'dipendenti.html',
+            Vehicle::class => 'veicoli.html',
+            default => 'index.html',
+        };
+    }
+
+    private function exemptionNotificationTarget(DocumentExemption $exemption): string
+    {
+        return match ($exemption->exemptable_type) {
             User::class => 'index.html',
             Employee::class => 'dipendenti.html',
             Vehicle::class => 'veicoli.html',

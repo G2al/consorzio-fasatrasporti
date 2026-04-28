@@ -1302,12 +1302,16 @@
     }
 
     function notificationIcon(type) {
-        if (['rejected', 'expired'].includes(type)) {
+        if (['rejected', 'expired', 'exemption_rejected'].includes(type)) {
             return '!';
         }
 
-        if (type === 'approved') {
+        if (['approved', 'exemption_approved'].includes(type)) {
             return 'OK';
+        }
+
+        if (type === 'exemption_pending') {
+            return 'EX';
         }
 
         return 'i';

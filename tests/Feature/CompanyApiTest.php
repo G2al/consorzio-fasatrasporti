@@ -79,6 +79,11 @@ class CompanyApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('documents.1.status', 'exemption_pending');
 
+        $this->withToken($token)
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->assertJsonPath('notifications.0.type', 'exemption_pending');
+
         DocumentExemption::query()
             ->where('template_id', $exemptionTemplateId)
             ->firstOrFail()
@@ -91,6 +96,16 @@ class CompanyApiTest extends TestCase
             ->getJson("/api/employees/{$employeeId}/documents")
             ->assertOk()
             ->assertJsonCount(7, 'documents');
+
+        $exemptionNotificationId = $this->withToken($token)
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->assertJsonPath('notifications.0.type', 'exemption_approved')
+            ->json('notifications.0.id');
+
+        $this->withToken($token)
+            ->deleteJson("/api/notifications/{$exemptionNotificationId}")
+            ->assertOk();
 
         $uploadResponse = $this->withToken($token)
             ->post('/api/documents', [

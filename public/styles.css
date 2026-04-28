@@ -408,7 +408,8 @@ select {
 }
 
 .notification-item.rejected .notification-mark,
-.notification-item.expired .notification-mark {
+.notification-item.expired .notification-mark,
+.notification-item.exemption_rejected .notification-mark {
     background: #fff0f0;
     color: #c92a2a;
 }
@@ -418,9 +419,15 @@ select {
     color: #a86000;
 }
 
-.notification-item.approved .notification-mark {
+.notification-item.approved .notification-mark,
+.notification-item.exemption_approved .notification-mark {
     background: #e9f7ef;
     color: #16703c;
+}
+
+.notification-item.exemption_pending .notification-mark {
+    background: #e8edf5;
+    color: #475569;
 }
 
 .notification-copy {
