@@ -30,7 +30,9 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->authGuard('admin')
             ->login()
-            ->favicon(asset('images/favicon.png'))
+            ->favicon(asset('images/favicon_consorzio.png'))
+            ->brandLogo(asset('images/logo_consorzio_white_trimmed.png'))
+            ->brandLogoHeight('8rem')
             ->colors([
                 'primary' => Color::Amber,
             ])
