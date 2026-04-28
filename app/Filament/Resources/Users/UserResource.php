@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Users;
 
 use App\Filament\Resources\Users\Pages\CreateUser;
+use App\Filament\Resources\Users\Pages\DocumentOverview;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
 use App\Filament\Resources\Users\RelationManagers\DocumentsRelationManager;
@@ -129,6 +130,11 @@ class UserResource extends Resource
                     ->visible(fn (User $record): bool => $record->role === 'company')
                     ->url(fn (User $record): string => route('admin.downloads.companies.show', [$record, 'all']))
                     ->openUrlInNewTab(),
+                Action::make('documentOverview')
+                    ->label('Panoramica')
+                    ->icon(Heroicon::OutlinedClipboardDocumentList)
+                    ->color('gray')
+                    ->url(fn (User $record): string => static::getUrl('documents', ['record' => $record])),
                 Action::make('approve')
                     ->label('Approva')
                     ->icon(Heroicon::OutlinedCheckCircle)
@@ -168,6 +174,7 @@ class UserResource extends Resource
             'index' => ListUsers::route('/'),
             'create' => CreateUser::route('/create'),
             'edit' => EditUser::route('/{record}/edit'),
+            'documents' => DocumentOverview::route('/{record}/documenti'),
         ];
     }
 }

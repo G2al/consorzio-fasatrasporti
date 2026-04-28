@@ -282,4 +282,45 @@ class AdminPanelTest extends TestCase
             ->assertSee('In attesa')
             ->assertSee('Mancante');
     }
+
+    public function test_admin_can_open_company_document_overview(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $company = User::query()->create([
+            'name' => 'Panoramica Demo SRL',
+            'email' => 'panoramica@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        Storage::disk('public')->put('uploaded-documents/panoramica/demo.pdf', 'PDF test');
+
+        $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/panoramica/demo.pdf',
+            'status' => 'pending',
+            'has_expiry' => false,
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->get('/admin/users/'.$company->id.'/documenti')
+            ->assertOk()
+            ->assertSee('Panoramica Demo SRL')
+            ->assertSee('In attesa')
+            ->assertSee('Mancante')
+            ->assertSee('Scarica')
+            ->assertSee('Revisiona');
+    }
 }

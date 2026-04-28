@@ -110,6 +110,11 @@ class DocumentApprovalResource extends Resource
         return $table
             ->defaultSort('created_at', 'desc')
             ->columns([
+                TextColumn::make('id')
+                    ->label('ID')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('template.section.name')
                     ->label('Sezione')
                     ->badge(),

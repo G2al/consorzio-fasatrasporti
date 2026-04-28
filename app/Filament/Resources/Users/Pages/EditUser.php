@@ -22,6 +22,12 @@ class EditUser extends EditRecord
                 ->visible(fn (): bool => $this->record->role === 'company')
                 ->url(fn (): string => route('admin.downloads.companies.show', [$this->record, 'all']))
                 ->openUrlInNewTab(),
+            Action::make('documentOverview')
+                ->label('Panoramica documenti')
+                ->icon(Heroicon::OutlinedClipboardDocumentList)
+                ->color('primary')
+                ->visible(fn (): bool => $this->record->role === 'company')
+                ->url(fn (): string => UserResource::getUrl('documents', ['record' => $this->record])),
             Action::make('downloadCompanyApproved')
                 ->label('ZIP societa')
                 ->icon(Heroicon::OutlinedBuildingOffice)
