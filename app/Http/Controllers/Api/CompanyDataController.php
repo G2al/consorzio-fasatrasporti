@@ -52,10 +52,11 @@ class CompanyDataController extends Controller
 
         $employeeCount = $company->employees()->count();
         $vehicleCount = $company->vehicles()->count();
-        $requiredCount = Section::query()
+        $companySection = Section::query()
             ->where('slug', 'societa')
-            ->withCount('documentTemplates')
-            ->value('document_templates_count') ?? 0;
+            ->with(['documentTemplates' => fn ($query) => $query->orderBy('name')])
+            ->first();
+        $requiredCount = $companySection?->documentTemplates->count() ?? 0;
         $approvedExemptionsCount = $company->documentExemptions()
             ->where('status', 'approved')
             ->whereNull('subtemplate_id')
@@ -65,28 +66,54 @@ class CompanyDataController extends Controller
 
         $documents = $company->documents()
             ->with(['template.section', 'subtemplate', 'documentable'])
+            ->whereNull('parent_uploaded_document_id')
             ->whereHas('template.section', fn ($query) => $query->where('slug', 'societa'))
+            ->latest('updated_at')
             ->get();
 
-        $approved = $documents->where('status', 'approved')->count();
-        $pending = $documents->where('status', 'pending')->count();
-        $rejected = $documents->where('status', 'rejected')->count();
+        $documentsByTemplate = $documents
+            ->whereNull('subtemplate_id')
+            ->groupBy('template_id');
+        $exemptTemplateIds = $company->documentExemptions()
+            ->where('status', 'approved')
+            ->whereNull('subtemplate_id')
+            ->whereHas('template.section', fn ($query) => $query->where('slug', 'societa'))
+            ->pluck('template_id')
+            ->all();
+        $documentRows = ($companySection?->documentTemplates ?? collect())
+            ->reject(fn ($template): bool => in_array($template->id, $exemptTemplateIds, true))
+            ->map(function ($template) use ($documentsByTemplate): array {
+                $document = $this->currentDocument($documentsByTemplate->get($template->id));
+
+                return [
+                    'document' => $document,
+                    'status' => $document?->effectiveStatus() ?? 'missing',
+                ];
+            });
+
+        $approved = $documentRows->where('status', 'approved')->count();
+        $pending = $documentRows->where('status', 'pending')->count();
+        $rejected = $documentRows->where('status', 'rejected')->count();
+        $expired = $documentRows->where('status', 'expired')->count();
+        $uploaded = $documentRows->filter(fn (array $row): bool => $row['document'] instanceof UploadedDocument && $row['status'] !== 'expired')->count();
+        $missing = $documentRows->whereIn('status', ['missing', 'expired'])->count();
         $today = now()->startOfDay();
         $expiryLimit = now()->addDays(60)->endOfDay();
 
         $expiringDocuments = $documents
-            ->flatMap(fn (UploadedDocument $document): array => $this->documentDeadlinePayloads($document, $expiryLimit, $today))
+            ->flatMap(fn (UploadedDocument $document): array => $this->documentDeadlinePayloads($document, $expiryLimit, $today, includeExpired: false))
             ->sortBy('expiry_date')
             ->values();
 
         return response()->json([
             'summary' => [
                 'required' => $requiredCount,
-                'uploaded' => $documents->count(),
-                'missing' => max($requiredCount - $documents->count(), 0),
+                'uploaded' => $uploaded,
+                'missing' => $missing,
                 'approved' => $approved,
                 'pending' => $pending,
                 'rejected' => $rejected,
+                'expired' => $expired,
                 'expiring' => $expiringDocuments->count(),
                 'employees' => $employeeCount,
                 'vehicles' => $vehicleCount,
@@ -307,7 +334,7 @@ class CompanyDataController extends Controller
         };
     }
 
-    private function documentDeadlinePayloads(UploadedDocument $document, $expiryLimit, $today): array
+    private function documentDeadlinePayloads(UploadedDocument $document, $expiryLimit, $today, bool $includeExpired = true): array
     {
         if ($document->status !== 'approved') {
             return [];
@@ -315,7 +342,7 @@ class CompanyDataController extends Controller
 
         $deadlines = [];
 
-        if (filled($document->expiry_date) && $document->expiry_date->lessThanOrEqualTo($expiryLimit)) {
+        if (filled($document->expiry_date) && $document->expiry_date->lessThanOrEqualTo($expiryLimit) && ($includeExpired || $document->expiry_date->greaterThanOrEqualTo($today))) {
             $deadlines[] = $this->documentDeadlinePayload(
                 $document,
                 'document',
@@ -325,7 +352,7 @@ class CompanyDataController extends Controller
             );
         }
 
-        if (filled($document->internal_expiry_date) && $document->internal_expiry_date->lessThanOrEqualTo($expiryLimit)) {
+        if (filled($document->internal_expiry_date) && $document->internal_expiry_date->lessThanOrEqualTo($expiryLimit) && ($includeExpired || $document->internal_expiry_date->greaterThanOrEqualTo($today))) {
             $deadlines[] = $this->documentDeadlinePayload(
                 $document,
                 'internal',
@@ -490,5 +517,15 @@ class CompanyDataController extends Controller
         return $exemption->subtemplate
             ? $exemption->template->name.' / '.$exemption->subtemplate->name
             : $exemption->template->name;
+    }
+
+    private function currentDocument(?Collection $documents): ?UploadedDocument
+    {
+        if (! $documents || $documents->isEmpty()) {
+            return null;
+        }
+
+        return $documents->first(fn (UploadedDocument $document): bool => ! $document->isExpired())
+            ?: $documents->first();
     }
 }

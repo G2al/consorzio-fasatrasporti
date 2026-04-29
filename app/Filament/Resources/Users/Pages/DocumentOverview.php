@@ -19,6 +19,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\Url;
 
 class DocumentOverview extends Page
 {
@@ -27,6 +28,9 @@ class DocumentOverview extends Page
     protected static string $resource = UserResource::class;
 
     protected string $view = 'filament.resources.users.pages.document-overview';
+
+    #[Url(as: 'filter')]
+    public string $filter = 'all';
 
     public function mount(int|string $record): void
     {
@@ -67,32 +71,42 @@ class DocumentOverview extends Page
         ];
     }
 
-    public function groups(): array
+    public function groups(bool $filtered = true): array
     {
         return [
-            $this->sectionGroup('societa', 'Societa', collect([$this->record])),
-            $this->sectionGroup('dipendenti', 'Dipendenti', $this->record->employees()->orderBy('last_name')->orderBy('first_name')->get()),
-            $this->sectionGroup('veicoli', 'Veicoli', $this->record->vehicles()->orderBy('plate')->get()),
+            $this->sectionGroup('societa', 'Societa', collect([$this->record]), $filtered),
+            $this->sectionGroup('dipendenti', 'Dipendenti', $this->record->employees()->orderBy('last_name')->orderBy('first_name')->get(), $filtered),
+            $this->sectionGroup('veicoli', 'Veicoli', $this->record->vehicles()->orderBy('plate')->get(), $filtered),
         ];
     }
 
     public function summary(): array
     {
-        $rows = collect($this->groups())
+        $rows = collect($this->groups(filtered: false))
             ->flatMap(fn (array $group): array => $group['owners'])
-            ->flatMap(fn (array $owner): array => $owner['rows']);
+            ->flatMap(fn (array $owner): array => $this->flattenRows($owner['rows'])->all());
 
         return [
             'total' => $rows->count(),
-            'missing' => $rows->where('status', 'missing')->count(),
+            'missing' => $rows->filter(fn (array $row): bool => in_array($row['status'], ['missing', 'expired'], true))->count(),
             'pending' => $rows->where('status', 'pending')->count(),
             'approved' => $rows->where('status', 'approved')->count(),
             'rejected' => $rows->where('status', 'rejected')->count(),
+            'expired' => $rows->where('status', 'expired')->count(),
+            'expiring' => $rows->filter(fn (array $row): bool => $row['is_expiring'])->count(),
             'exemptions' => $rows->filter(fn (array $row): bool => str_starts_with($row['status'], 'exemption_'))->count(),
         ];
     }
 
-    private function sectionGroup(string $slug, string $title, Collection $owners): array
+    public function filterUrl(string $filter): string
+    {
+        return UserResource::getUrl('documents', [
+            'record' => $this->record,
+            'filter' => $filter,
+        ]);
+    }
+
+    private function sectionGroup(string $slug, string $title, Collection $owners, bool $filtered): array
     {
         $section = Section::query()
             ->where('slug', $slug)
@@ -108,19 +122,22 @@ class DocumentOverview extends Page
                 ->map(fn (Model $owner): array => [
                     'label' => $this->ownerLabel($owner),
                     'meta' => $this->ownerMeta($owner),
-                    'rows' => $this->ownerRows($owner, $templates),
+                    'rows' => $this->ownerRows($owner, $templates, $filtered),
                 ])
+                ->filter(fn (array $owner): bool => $owner['rows'] !== [] || $this->filter === 'all')
                 ->values()
                 ->all(),
         ];
     }
 
-    private function ownerRows(Model $owner, Collection $templates): array
+    private function ownerRows(Model $owner, Collection $templates, bool $filtered): array
     {
         $documents = $owner->documents()
-            ->with(['template', 'subtemplate'])
+            ->whereNull('parent_uploaded_document_id')
+            ->with(['template', 'subtemplate', 'integrations'])
+            ->latest('updated_at')
             ->get()
-            ->keyBy(fn (UploadedDocument $document): string => $this->documentKey($document->template_id, $document->subtemplate_id));
+            ->groupBy(fn (UploadedDocument $document): string => $this->documentKey($document->template_id, $document->subtemplate_id));
 
         $exemptions = $owner->documentExemptions()
             ->with(['template', 'subtemplate'])
@@ -129,35 +146,50 @@ class DocumentOverview extends Page
 
         return $templates
             ->map(fn (DocumentTemplate $template): array => $this->templateRow($template, $documents, $exemptions))
+            ->map(fn (array $row): ?array => $filtered ? $this->filterRow($row) : $row)
+            ->filter()
             ->values()
             ->all();
     }
 
     private function templateRow(DocumentTemplate $template, Collection $documents, Collection $exemptions): array
     {
+        $document = $this->currentDocument($documents->get($this->documentKey($template->id)));
         $row = $this->documentRow(
             $template->name,
-            $documents->get($this->documentKey($template->id)),
+            $document,
             $exemptions->get($this->documentKey($template->id)),
             false,
         );
 
-        $row['children'] = $template->subtemplates
+        $subtemplateRows = $template->subtemplates
             ->map(fn (DocumentSubtemplate $subtemplate): array => $this->documentRow(
                 $subtemplate->name,
-                $documents->get($this->documentKey($template->id, $subtemplate->id)),
+                $this->currentDocument($documents->get($this->documentKey($template->id, $subtemplate->id))),
                 $exemptions->get($this->documentKey($template->id, $subtemplate->id)),
                 true,
             ))
             ->values()
             ->all();
 
+        $integrationRows = $document?->integrations
+            ->map(fn (UploadedDocument $integration): array => $this->documentRow(
+                $integration->integration_name ?: 'Integrazione',
+                $integration,
+                null,
+                true,
+            ))
+            ->values()
+            ->all() ?? [];
+
+        $row['children'] = [...$subtemplateRows, ...$integrationRows];
+
         return $row;
     }
 
     private function documentRow(string $name, ?UploadedDocument $document, ?DocumentExemption $exemption, bool $optional): array
     {
-        $status = $document?->status ?? 'missing';
+        $status = $document?->effectiveStatus() ?? 'missing';
 
         if ($exemption?->status) {
             $status = 'exemption_'.$exemption->status;
@@ -178,6 +210,7 @@ class DocumentOverview extends Page
             'internal_expiry' => $document?->internal_expiry_date
                 ? trim(($document->internal_expiry_name ?: 'Requisito interno').' '.$document->internal_expiry_date->format('d/m/Y'))
                 : null,
+            'is_expiring' => $document ? $this->isExpiring($document) : false,
         ];
     }
 
@@ -185,6 +218,7 @@ class DocumentOverview extends Page
     {
         return match ($status) {
             'approved' => 'Approvato',
+            'expired' => 'Scaduto',
             'pending' => 'In attesa',
             'rejected' => 'Respinto',
             'exemption_approved' => 'Esente',
@@ -217,5 +251,85 @@ class DocumentOverview extends Page
     private function documentKey(int $templateId, ?int $subtemplateId = null): string
     {
         return $templateId.':'.($subtemplateId ?: 'parent');
+    }
+
+    private function filterRow(array $row): ?array
+    {
+        if ($this->filter === 'all') {
+            return $row;
+        }
+
+        $children = collect($row['children'] ?? [])
+            ->filter(fn (array $child): bool => $this->rowMatchesFilter($child))
+            ->values()
+            ->all();
+
+        $matches = $this->rowMatchesFilter($row);
+
+        if (! $matches && $children === []) {
+            return null;
+        }
+
+        $row['children'] = $matches ? ($row['children'] ?? []) : $children;
+
+        return $row;
+    }
+
+    private function rowMatchesFilter(array $row): bool
+    {
+        return match ($this->filter) {
+            'missing' => in_array($row['status'], ['missing', 'expired'], true),
+            'pending' => $row['status'] === 'pending',
+            'approved' => $row['status'] === 'approved',
+            'rejected' => $row['status'] === 'rejected',
+            'expired' => $row['status'] === 'expired',
+            'expiring' => (bool) $row['is_expiring'],
+            'exemptions' => str_starts_with($row['status'], 'exemption_'),
+            default => true,
+        };
+    }
+
+    private function flattenRows(array $rows): Collection
+    {
+        return collect($rows)
+            ->flatMap(fn (array $row): array => [$row, ...($row['children'] ?? [])]);
+    }
+
+    private function isExpiring(UploadedDocument $document): bool
+    {
+        if ($document->status !== 'approved' || $document->isExpired()) {
+            return false;
+        }
+
+        $thresholds = collect(explode(',', (string) config('services.documents.deadline_reminder_days', '30,15')))
+            ->map(fn (string $day): int => (int) trim($day))
+            ->filter(fn (int $day): bool => $day > 0)
+            ->values();
+        $maxDays = $thresholds->max() ?: 30;
+        $today = now()->startOfDay();
+
+        foreach ([$document->expiry_date, $document->internal_expiry_date] as $date) {
+            if (! $date) {
+                continue;
+            }
+
+            $days = (int) $today->diffInDays($date->copy()->startOfDay(), false);
+
+            if ($days >= 0 && $days <= $maxDays) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function currentDocument(?Collection $documents): ?UploadedDocument
+    {
+        if (! $documents || $documents->isEmpty()) {
+            return null;
+        }
+
+        return $documents->first(fn (UploadedDocument $document): bool => ! $document->isExpired())
+            ?: $documents->first();
     }
 }

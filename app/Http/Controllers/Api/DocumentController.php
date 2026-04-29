@@ -145,6 +145,74 @@ class DocumentController extends Controller
         ], 201);
     }
 
+    public function requestIntegrations(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'template_id' => ['required', 'integer', 'exists:document_templates,id'],
+            'documentable_type' => ['required', 'string', 'in:company,employee,vehicle'],
+            'documentable_id' => ['nullable', 'integer'],
+            'integration_notes' => ['nullable', 'string', 'max:2000'],
+            'files' => ['required', 'array', 'min:1', 'max:10'],
+            'files.*' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:'.config('services.documents.upload_max_kb')],
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->with('section')
+            ->findOrFail($data['template_id']);
+
+        $this->assertTemplateMatchesType($template, $data['documentable_type']);
+
+        $documentable = $this->resolveDocumentable(
+            $request,
+            $data['documentable_type'],
+            $data['documentable_id'] ?? null,
+        );
+
+        $parent = $this->currentDocument($documentable->documents()
+            ->whereNull('parent_uploaded_document_id')
+            ->where('template_id', $template->id)
+            ->whereNull('subtemplate_id')
+            ->latest('updated_at')
+            ->get());
+
+        abort_unless($parent instanceof UploadedDocument && $parent->status === 'approved' && ! $parent->isExpired(), 422, 'Puoi inviare integrazioni solo per un documento approvato e non scaduto.');
+
+        $documents = collect($request->file('files'))
+            ->map(function (UploadedFile $file) use ($documentable, $template, $parent, $data, $request): UploadedDocument {
+                $path = $file->store(
+                    "uploaded-documents/{$request->user()->id}/{$data['documentable_type']}/integrazioni",
+                    'public',
+                );
+
+                $document = $documentable->documents()->create([
+                    'template_id' => $template->id,
+                    'parent_uploaded_document_id' => $parent->id,
+                    'integration_name' => pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                    'integration_notes' => $data['integration_notes'] ?? null,
+                    'file_path' => $path,
+                    'status' => 'pending',
+                    'has_expiry' => false,
+                ]);
+
+                AuditLog::record('document.integration_uploaded', $document, 'Integrazione documento caricata', [
+                    'template' => $template->name,
+                    'parent_document_id' => $parent->id,
+                    'integration_name' => $document->integration_name,
+                    'notes' => $data['integration_notes'] ?? null,
+                    'type' => $data['documentable_type'],
+                ], actor: $request->user());
+
+                return $document;
+            })
+            ->values();
+
+        return response()->json([
+            'documents' => $documents
+                ->map(fn (UploadedDocument $document): array => $this->uploadedDocumentPayload($document->fresh(['template', 'parentDocument'])))
+                ->all(),
+        ], 201);
+    }
+
     private function storeDocument(Model $documentable, DocumentTemplate $template, ?DocumentSubtemplate $subtemplate, UploadedFile $file, string $type, int $companyId, bool $hasExpiry, ?string $expiryDate, ?string $internalExpiryName, ?string $internalExpiryDate): UploadedDocument
     {
         $path = $file->store(
@@ -155,6 +223,23 @@ class DocumentController extends Controller
         $document = $documentable->documents()
             ->where('template_id', $template->id)
             ->where('subtemplate_id', $subtemplate?->id)
+            ->where(function ($query): void {
+                $today = now()->toDateString();
+
+                $query
+                    ->where('status', '!=', 'approved')
+                    ->orWhere(function ($query) use ($today): void {
+                        $query
+                            ->where('status', 'approved')
+                            ->where(function ($query) use ($today): void {
+                                $query->whereNull('expiry_date')->orWhereDate('expiry_date', '>=', $today);
+                            })
+                            ->where(function ($query) use ($today): void {
+                                $query->whereNull('internal_expiry_date')->orWhereDate('internal_expiry_date', '>=', $today);
+                            });
+                    });
+            })
+            ->latest('updated_at')
             ->first();
 
         $payload = [
@@ -183,11 +268,15 @@ class DocumentController extends Controller
     {
         $section = Section::query()
             ->where('slug', $sectionSlug)
-            ->with(['documentTemplates' => fn ($query) => $query->with('subtemplates')->orderBy('name')])
+            ->with(['documentTemplates' => fn ($query) => $query
+                ->with(['subtemplates', 'category'])
+                ->orderBy('name')])
             ->firstOrFail();
 
         $uploadedDocuments = $documentable->documents()
-            ->with(['template', 'subtemplate'])
+            ->whereNull('parent_uploaded_document_id')
+            ->with(['template', 'subtemplate', 'integrations'])
+            ->latest('updated_at')
             ->get()
             ->groupBy(fn (UploadedDocument $document): string => $this->documentKey($document->template_id, $document->subtemplate_id));
 
@@ -205,9 +294,9 @@ class DocumentController extends Controller
             'documents' => $section->documentTemplates
                 ->filter(fn (DocumentTemplate $template): bool => ($exemptions->get($this->documentKey($template->id))?->first()?->status ?? null) !== 'approved')
                 ->map(function (DocumentTemplate $template) use ($uploadedDocuments, $exemptions): array {
-                    $document = $uploadedDocuments->get($this->documentKey($template->id))?->first();
+                    $document = $this->currentDocument($uploadedDocuments->get($this->documentKey($template->id)));
                     $exemption = $exemptions->get($this->documentKey($template->id))?->first();
-                    $status = $document?->status ?? 'missing';
+                    $status = $document?->effectiveStatus() ?? 'missing';
 
                     if ($exemption?->status === 'pending') {
                         $status = 'exemption_pending';
@@ -219,6 +308,12 @@ class DocumentController extends Controller
                             'name' => $template->name,
                             'is_required' => $template->is_required,
                             'description' => $template->description,
+                            'category' => $template->category ? [
+                                'id' => $template->category->id,
+                                'name' => $template->category->name,
+                                'description' => $template->category->description,
+                                'sort_order' => $template->category->sort_order,
+                            ] : null,
                         ],
                         'uploaded_document' => $document ? $this->uploadedDocumentPayload($document) : null,
                         'exemption' => $exemption ? $this->exemptionPayload($exemption) : null,
@@ -226,9 +321,9 @@ class DocumentController extends Controller
                         'subdocuments' => $template->subtemplates
                             ->filter(fn (DocumentSubtemplate $subtemplate): bool => ($exemptions->get($this->documentKey($template->id, $subtemplate->id))?->first()?->status ?? null) !== 'approved')
                             ->map(function (DocumentSubtemplate $subtemplate) use ($template, $uploadedDocuments, $exemptions): array {
-                                $document = $uploadedDocuments->get($this->documentKey($template->id, $subtemplate->id))?->first();
+                                $document = $this->currentDocument($uploadedDocuments->get($this->documentKey($template->id, $subtemplate->id)));
                                 $exemption = $exemptions->get($this->documentKey($template->id, $subtemplate->id))?->first();
-                                $status = $document?->status ?? 'missing';
+                                $status = $document?->effectiveStatus() ?? 'missing';
 
                                 if ($exemption?->status === 'pending') {
                                     $status = 'exemption_pending';
@@ -290,12 +385,21 @@ class DocumentController extends Controller
             'file_path' => $document->file_path,
             'file_url' => $document->file_url,
             'status' => $document->status,
+            'effective_status' => $document->effectiveStatus(),
+            'is_expired' => $document->isExpired(),
             'has_expiry' => $document->has_expiry,
             'expiry_date' => $document->expiry_date?->toDateString(),
             'internal_expiry_name' => $document->internal_expiry_name,
             'internal_expiry_date' => $document->internal_expiry_date?->toDateString(),
             'approved_at' => $document->approved_at?->toIso8601String(),
             'admin_notes' => $document->admin_notes,
+            'parent_uploaded_document_id' => $document->parent_uploaded_document_id,
+            'integration_name' => $document->integration_name,
+            'integration_notes' => $document->integration_notes,
+            'is_integration' => $document->isIntegration(),
+            'integrations' => $document->relationLoaded('integrations')
+                ? $document->integrations->map(fn (UploadedDocument $integration): array => $this->uploadedDocumentPayload($integration))->all()
+                : [],
             'created_at' => $document->created_at?->toIso8601String(),
             'updated_at' => $document->updated_at?->toIso8601String(),
         ];
@@ -340,5 +444,15 @@ class DocumentController extends Controller
     private function documentKey(int $templateId, ?int $subtemplateId = null): string
     {
         return $templateId.':'.($subtemplateId ?: 'parent');
+    }
+
+    private function currentDocument(?\Illuminate\Support\Collection $documents): ?UploadedDocument
+    {
+        if (! $documents || $documents->isEmpty()) {
+            return null;
+        }
+
+        return $documents->first(fn (UploadedDocument $document): bool => ! $document->isExpired())
+            ?: $documents->first();
     }
 }

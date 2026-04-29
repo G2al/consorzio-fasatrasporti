@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Storage;
 
@@ -15,6 +16,9 @@ class UploadedDocument extends Model
     protected $fillable = [
         'template_id',
         'subtemplate_id',
+        'parent_uploaded_document_id',
+        'integration_name',
+        'integration_notes',
         'documentable_id',
         'documentable_type',
         'file_path',
@@ -47,6 +51,17 @@ class UploadedDocument extends Model
         return $this->belongsTo(DocumentSubtemplate::class, 'subtemplate_id');
     }
 
+    public function parentDocument(): BelongsTo
+    {
+        return $this->belongsTo(UploadedDocument::class, 'parent_uploaded_document_id');
+    }
+
+    public function integrations(): HasMany
+    {
+        return $this->hasMany(UploadedDocument::class, 'parent_uploaded_document_id')
+            ->latest('created_at');
+    }
+
     public function documentable(): MorphTo
     {
         return $this->morphTo();
@@ -69,10 +84,32 @@ class UploadedDocument extends Model
         return asset('storage/'.$this->file_path);
     }
 
+    public function isExpired(): bool
+    {
+        if ($this->status !== 'approved' || $this->isIntegration()) {
+            return false;
+        }
+
+        $today = now()->startOfDay();
+
+        return ($this->expiry_date && $this->expiry_date->copy()->startOfDay()->lt($today))
+            || ($this->internal_expiry_date && $this->internal_expiry_date->copy()->startOfDay()->lt($today));
+    }
+
+    public function effectiveStatus(): string
+    {
+        return $this->isExpired() ? 'expired' : $this->status;
+    }
+
+    public function isIntegration(): bool
+    {
+        return filled($this->parent_uploaded_document_id);
+    }
+
     protected static function booted(): void
     {
         static::saving(function (UploadedDocument $document): void {
-            if (filled($document->subtemplate_id)) {
+            if (filled($document->subtemplate_id) || filled($document->parent_uploaded_document_id)) {
                 $document->has_expiry = false;
                 $document->expiry_date = null;
                 $document->internal_expiry_name = null;

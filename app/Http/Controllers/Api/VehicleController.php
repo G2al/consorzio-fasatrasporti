@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\DocumentTemplate;
+use App\Models\UploadedDocument;
 use App\Models\Vehicle;
 use App\Models\VehicleCapacity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 
 class VehicleController extends Controller
@@ -83,14 +85,16 @@ class VehicleController extends Controller
 
     private function payload(Vehicle $vehicle, ?int $requiredDocumentsCount = null): array
     {
+        $currentStatuses = $this->currentDocumentStatuses($vehicle);
+
         return [
             'id' => $vehicle->id,
             'plate' => $vehicle->plate,
             'capacity' => $vehicle->capacity,
-            'documents_count' => $vehicle->documents_count ?? $vehicle->documents()->count(),
-            'approved_documents_count' => $vehicle->approved_documents_count ?? $vehicle->documents()->where('status', 'approved')->count(),
-            'pending_documents_count' => $vehicle->pending_documents_count ?? $vehicle->documents()->where('status', 'pending')->count(),
-            'rejected_documents_count' => $vehicle->rejected_documents_count ?? $vehicle->documents()->where('status', 'rejected')->count(),
+            'documents_count' => $currentStatuses->reject(fn (string $status): bool => in_array($status, ['missing', 'expired'], true))->count(),
+            'approved_documents_count' => $currentStatuses->filter(fn (string $status): bool => $status === 'approved')->count(),
+            'pending_documents_count' => $currentStatuses->filter(fn (string $status): bool => $status === 'pending')->count(),
+            'rejected_documents_count' => $currentStatuses->filter(fn (string $status): bool => $status === 'rejected')->count(),
             'required_documents_count' => max(($requiredDocumentsCount ?? $this->requiredDocumentsCount()) - $vehicle->documentExemptions()
                 ->where('status', 'approved')
                 ->whereNull('subtemplate_id')
@@ -124,4 +128,32 @@ class VehicleController extends Controller
             ->all() ?: VehicleCapacity::VALUES;
     }
 
+    private function currentDocumentStatuses(Vehicle $vehicle): Collection
+    {
+        $documents = $vehicle->documents()
+            ->whereNull('parent_uploaded_document_id')
+            ->latest('updated_at')
+            ->get()
+            ->whereNull('subtemplate_id')
+            ->groupBy('template_id');
+
+        return DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'veicoli'))
+            ->get()
+            ->map(function (DocumentTemplate $template) use ($documents): string {
+                $document = $this->currentDocument($documents->get($template->id));
+
+                return $document?->effectiveStatus() ?? 'missing';
+            });
+    }
+
+    private function currentDocument(?Collection $documents): ?UploadedDocument
+    {
+        if (! $documents || $documents->isEmpty()) {
+            return null;
+        }
+
+        return $documents->first(fn (UploadedDocument $document): bool => ! $document->isExpired())
+            ?: $documents->first();
+    }
 }

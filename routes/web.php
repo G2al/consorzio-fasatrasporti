@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\DocumentDownloadController;
+use App\Models\UploadedDocument;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -19,3 +20,11 @@ Route::middleware('auth:admin')
         Route::get('/templates/{template}', [DocumentDownloadController::class, 'template'])
             ->name('templates.show');
     });
+
+Route::middleware('auth:admin')
+    ->get('/admin/document-approvals/pending-count', fn () => response()->json([
+        'count' => UploadedDocument::query()
+            ->where('status', 'pending')
+            ->count(),
+    ]))
+    ->name('admin.document-approvals.pending-count');

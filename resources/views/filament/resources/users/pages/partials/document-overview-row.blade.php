@@ -11,7 +11,9 @@
         @endif
     </td>
     <td>
-        <span class="docs-status {{ $statusClass($row['status']) }}">{{ $row['status_label'] }}</span>
+        <span class="docs-status {{ $row['is_expiring'] ? 'expiring' : $statusClass($row['status']) }}">
+            {{ $row['is_expiring'] ? 'In scadenza' : $row['status_label'] }}
+        </span>
     </td>
     <td>
         @if ($row['expiry_date'])

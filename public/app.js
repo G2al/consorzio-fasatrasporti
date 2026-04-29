@@ -10,11 +10,14 @@
         employees: [],
         vehicles: [],
     };
+    const liveRefreshState = new Map();
+    const renderSnapshotState = new Map();
     const statusLabels = {
         missing: 'Mancante',
         pending: 'In attesa',
         approved: 'Approvato',
         rejected: 'Respinto',
+        expired: 'Scaduto',
         exemption_pending: 'Esenzione in attesa',
     };
 
@@ -141,6 +144,83 @@
 
             request.addEventListener('error', () => reject(new Error('Caricamento non riuscito.')));
             request.send(formData);
+        });
+    }
+
+    function startLiveRefresh(key, callback, interval = 15000) {
+        if (liveRefreshState.has(key)) {
+            return;
+        }
+
+        let running = false;
+        const timer = window.setInterval(async () => {
+            if (running || document.hidden) {
+                return;
+            }
+
+            running = true;
+
+            try {
+                await callback({ silent: true });
+            } catch (error) {
+                console.warn('Live refresh failed', error);
+            } finally {
+                running = false;
+            }
+        }, interval);
+
+        liveRefreshState.set(key, timer);
+    }
+
+    function shouldSkipSilentRefresh() {
+        return Boolean(
+            document.body.classList.contains('has-open-modal')
+            || qs('form:focus-within')
+            || qs('.notification-wrapper.is-open')
+            || qs('.profile-drawer-backdrop.is-open')
+        );
+    }
+
+    function stableStringify(value) {
+        return JSON.stringify(value);
+    }
+
+    function snapshotKey(options = {}) {
+        return options.endpoint || `${options.type || 'company'}:${options.id || 'root'}:${appState.documentFilter}`;
+    }
+
+    function captureOpenDocumentState(container) {
+        return {
+            categories: qsa('[data-document-category-key]', container)
+                .filter((element) => element.classList.contains('is-open'))
+                .map((element) => element.dataset.documentCategoryKey),
+            documents: qsa('[data-document-key]', container)
+                .filter((element) => qs('.document-card-details', element)?.classList.contains('is-open'))
+                .map((element) => element.dataset.documentKey),
+        };
+    }
+
+    function restoreOpenDocumentState(container, state) {
+        if (!state) {
+            return;
+        }
+
+        qsa('[data-document-category-key]', container).forEach((element) => {
+            const isOpen = state.categories.includes(element.dataset.documentCategoryKey);
+            const body = qs('.document-category-body', element);
+            const button = qs('[data-toggle-document-category]', element);
+
+            body?.classList.toggle('is-open', isOpen);
+            button?.setAttribute('aria-expanded', String(isOpen));
+        });
+
+        qsa('[data-document-key]', container).forEach((element) => {
+            const isOpen = state.documents.includes(element.dataset.documentKey);
+            const details = qs('.document-card-details', element);
+            const button = qs('[data-toggle-document-card]', element);
+
+            details?.classList.toggle('is-open', isOpen);
+            button?.setAttribute('aria-expanded', String(isOpen));
         });
     }
 
@@ -565,13 +645,43 @@
     }
 
     function renderDocuments(container, documents, options = {}) {
-        if (!documents.length) {
-            container.innerHTML = `<div class="empty-state">${escapeHtml(options.emptyMessage || 'Nessun template disponibile.')}</div>`;
+        const key = snapshotKey(options);
+        const payloadSnapshot = stableStringify(documents);
+        const previousSnapshot = renderSnapshotState.get(key);
+        const shouldRestoreOpenState = previousSnapshot !== undefined;
+
+        if (options.silent && previousSnapshot === payloadSnapshot) {
             return;
         }
 
-        container.innerHTML = `
-            ${documents.map((item) => {
+        const openState = shouldRestoreOpenState ? captureOpenDocumentState(container) : null;
+
+        if (!documents.length) {
+            container.innerHTML = `<div class="empty-state">${escapeHtml(options.emptyMessage || 'Nessun template disponibile.')}</div>`;
+            renderSnapshotState.set(key, payloadSnapshot);
+            return;
+        }
+
+        const primaryDocuments = documents.filter((item) => !item.template?.category);
+        const categoryGroups = documents
+            .filter((item) => item.template?.category)
+            .reduce((groups, item) => {
+                const category = item.template.category;
+                const key = String(category.id);
+
+                if (!groups.has(key)) {
+                    groups.set(key, {
+                        category,
+                        documents: [],
+                    });
+                }
+
+                groups.get(key).documents.push(item);
+
+                return groups;
+            }, new Map());
+
+        const renderDocumentItem = (item) => {
             const uploaded = item.uploaded_document;
             const status = item.status || 'missing';
             const note = uploaded?.admin_notes
@@ -581,10 +691,16 @@
                 ? `<a class="document-file-link" href="${escapeHtml(uploaded.file_url)}" target="_blank" rel="noreferrer">${svg('file')}Apri file</a>`
                 : '';
             const dates = documentMeta(uploaded, status);
-            const upload = ['missing', 'rejected'].includes(status)
+            const upload = ['missing', 'rejected', 'expired'].includes(status)
                 ? uploadForm(item.template.id, null, options.type, options.id, true)
                 : '';
-            const exemption = ['missing', 'rejected'].includes(status)
+            const replaceUpload = status === 'approved'
+                ? uploadForm(item.template.id, null, options.type, options.id, true, 'Sostituisci file')
+                : '';
+            const integration = status === 'approved'
+                ? integrationForm(item.template.id, options.type, options.id)
+                : '';
+            const exemption = ['missing', 'rejected', 'expired'].includes(status)
                 ? exemptionForm(item.template.id, null, options.type, options.id)
                 : '';
             const subdocuments = item.subdocuments || [];
@@ -600,10 +716,10 @@
                         const subFile = subUploaded?.file_url
                             ? `<a class="document-file-link" href="${escapeHtml(subUploaded.file_url)}" target="_blank" rel="noreferrer">${svg('file')}Apri file</a>`
                             : '';
-                        const subUpload = ['missing', 'rejected'].includes(subStatus)
+                        const subUpload = ['missing', 'rejected', 'expired'].includes(subStatus)
                             ? uploadForm(item.template.id, subitem.subtemplate.id, options.type, options.id, false)
                             : '';
-                        const subExemption = ['missing', 'rejected'].includes(subStatus)
+                        const subExemption = ['missing', 'rejected', 'expired'].includes(subStatus)
                             ? exemptionForm(item.template.id, subitem.subtemplate.id, options.type, options.id)
                             : '';
                         const subExemptionNote = subitem.exemption?.admin_notes && subitem.exemption.status === 'rejected'
@@ -652,12 +768,38 @@
             const pendingExemption = status === 'exemption_pending'
                 ? '<p class="document-note neutral">Richiesta inviata. Attendi conferma dell&apos;admin: se viene approvata, questo documento non sara piu richiesto.</p>'
                 : '';
-            const hasAction = Boolean(upload || exemption);
+            const expiredNote = status === 'expired'
+                ? '<p class="document-note danger">Documento scaduto: carica una nuova versione aggiornata.</p>'
+                : '';
+            const integrations = uploaded?.integrations || [];
+            const integrationsHtml = integrations.length ? `
+                <div class="subdocument-list">
+                    <div class="subdocument-list-title">Integrazioni richieste</div>
+                    ${integrations.map((document) => `
+                        <div class="subdocument-item is-${escapeHtml(document.effective_status || document.status || 'pending')}">
+                            <div class="subdocument-header">
+                                <div>
+                                    <strong>${escapeHtml(document.integration_name || 'Integrazione')}</strong>
+                                    ${document.integration_notes ? `<p class="subdocument-description">${escapeHtml(document.integration_notes)}</p>` : ''}
+                                </div>
+                                ${statusPill(document.effective_status || document.status || 'pending')}
+                            </div>
+                            <div class="subdocument-body">
+                                ${document.file_url ? `<a class="document-file-link" href="${escapeHtml(document.file_url)}" target="_blank" rel="noreferrer">${svg('file')}Apri file</a>` : ''}
+                                ${document.admin_notes ? `<p class="document-note">Note: ${escapeHtml(document.admin_notes)}</p>` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : '';
+            const hasAction = Boolean(upload || exemption || replaceUpload || integration);
+            const documentKey = `${item.template.id}:${item.uploaded_document?.id || 'missing'}:${status}`;
+            const defaultOpen = ['missing', 'rejected', 'expired', 'exemption_pending'].includes(status);
 
             return `
-                <article class="document-card is-${escapeHtml(status)}">
+                <article class="document-card is-${escapeHtml(status)}" data-document-key="${escapeHtml(documentKey)}">
                     <div class="document-card-main">
-                        <button class="document-card-header" type="button" data-toggle-document-card aria-expanded="${hasAction ? 'true' : 'false'}">
+                        <button class="document-card-header" type="button" data-toggle-document-card aria-expanded="${defaultOpen ? 'true' : 'false'}">
                             <div class="document-heading">
                                 <h3 class="document-title">${escapeHtml(item.template.name)}</h3>
                                 ${dates}
@@ -668,26 +810,58 @@
                                 <span class="document-toggle" aria-hidden="true">Apri</span>
                             </div>
                         </button>
-                        <div class="document-card-details ${hasAction ? 'is-open' : ''}">
+                        <div class="document-card-details ${defaultOpen ? 'is-open' : ''}">
                             <div class="document-card-body">
                             ${file}
                             ${note}
+                            ${expiredNote}
                             ${exemptionNote}
                             ${pendingExemption}
                             ${subdocumentsHtml}
+                            ${integrationsHtml}
                             </div>
                             ${hasAction ? `
                                 <div class="document-actions">
                                     ${upload}
                                     ${exemption}
+                                    ${replaceUpload}
+                                    ${integration}
                                 </div>
                             ` : ''}
                         </div>
                     </div>
                 </article>
             `;
-        }).join('')}
+        };
+
+        container.innerHTML = `
+            ${primaryDocuments.map(renderDocumentItem).join('')}
+            ${Array.from(categoryGroups.values()).map((group) => `
+                <section class="document-category-block" data-document-category-key="${escapeHtml(String(group.category.id))}">
+                    <button class="document-category-header" type="button" data-toggle-document-category aria-expanded="false">
+                        <span>${escapeHtml(group.category.name)}</span>
+                        <strong>${group.documents.length}</strong>
+                    </button>
+                    ${group.category.description ? `<p class="document-category-description">${escapeHtml(group.category.description)}</p>` : ''}
+                    <div class="document-category-body">
+                        ${group.documents.map(renderDocumentItem).join('')}
+                    </div>
+                </section>
+            `).join('')}
         `;
+
+        restoreOpenDocumentState(container, openState);
+        renderSnapshotState.set(key, payloadSnapshot);
+
+        qsa('[data-toggle-document-category]', container).forEach((button) => {
+            const body = qs('.document-category-body', button.closest('.document-category-block'));
+
+            button.addEventListener('click', () => {
+                const isOpen = !body?.classList.contains('is-open');
+                body?.classList.toggle('is-open', isOpen);
+                button.setAttribute('aria-expanded', String(isOpen));
+            });
+        });
 
         qsa('[data-toggle-document-card]', container).forEach((button) => {
             const details = qs('.document-card-details', button.closest('.document-card'));
@@ -749,9 +923,34 @@
                 }
             });
         });
+
+        qsa('[data-integration-form]', container).forEach((form) => {
+            bindFileInputs(form);
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                hideAlert();
+
+                const button = qs('button[type="submit"]', form);
+                setButtonLoading(button, true, 'Invio integrazioni...');
+                updateUploadProgress(form, 0);
+
+                try {
+                    const formData = new FormData(form);
+                    await apiUpload('/document-integrations', formData, (progress) => updateUploadProgress(form, progress));
+                    documentCache.delete(options.endpoint || '');
+                    showAlert('Integrazioni inviate.', 'success');
+                    await options.refresh();
+                } catch (error) {
+                    showAlert(error.message);
+                } finally {
+                    setButtonLoading(button, false);
+                }
+            });
+        });
     }
 
-    function uploadForm(templateId, subtemplateId, type, id, allowExpiry = true) {
+    function uploadForm(templateId, subtemplateId, type, id, allowExpiry = true, buttonLabel = 'Carica') {
         return `
             <form class="upload-form" data-upload-form>
                 <input type="hidden" name="template_id" value="${templateId}">
@@ -795,7 +994,31 @@
                     </div>
                 ` : '<input type="hidden" name="has_expiry" value="0">'}
                 <div class="upload-progress" data-upload-progress><span></span></div>
-                <button class="btn" type="submit" data-loading-text="Caricamento..."><span class="btn-content">${svg('upload')}Carica</span><span class="btn-loader" aria-hidden="true"></span></button>
+                <button class="btn" type="submit" data-loading-text="Caricamento..."><span class="btn-content">${svg('upload')}${escapeHtml(buttonLabel)}</span><span class="btn-loader" aria-hidden="true"></span></button>
+            </form>
+        `;
+    }
+
+    function integrationForm(templateId, type, id) {
+        return `
+            <form class="integration-form" data-integration-form>
+                <input type="hidden" name="template_id" value="${templateId}">
+                <input type="hidden" name="documentable_type" value="${escapeHtml(type)}">
+                ${id ? `<input type="hidden" name="documentable_id" value="${escapeHtml(id)}">` : ''}
+                <div class="field">
+                    <label>Nota integrazione</label>
+                    <textarea class="input" name="integration_notes" rows="2" placeholder="Facoltativa"></textarea>
+                </div>
+                <div class="field file-field">
+                    <label>File integrazioni</label>
+                    <label class="file-picker">
+                        <input class="file-input" type="file" name="files[]" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required multiple data-file-input>
+                        <span class="file-picker-icon">${svg('upload')}</span>
+                        <span data-file-name>Seleziona uno o piu PDF/DOC</span>
+                    </label>
+                </div>
+                <div class="upload-progress" data-upload-progress><span></span></div>
+                <button class="btn secondary" type="submit" data-loading-text="Invio integrazioni..."><span class="btn-content">${svg('plus')}Invia integrazioni</span><span class="btn-loader" aria-hidden="true"></span></button>
             </form>
         `;
     }
@@ -871,7 +1094,8 @@
         qsa('[data-file-input]', scope).forEach((input) => {
             input.addEventListener('change', () => {
                 const filePicker = input.closest('.file-picker');
-                const name = input.files?.[0]?.name || 'Trascina qui o seleziona file';
+                const count = input.files?.length || 0;
+                const name = count > 1 ? `${count} file selezionati` : (input.files?.[0]?.name || 'Trascina qui o seleziona file');
                 const label = qs('[data-file-name]', filePicker);
 
                 if (label) {
@@ -1101,6 +1325,7 @@
         bindCompanyChrome();
         bindDashboardFilters();
         await refreshDashboardPage();
+        startLiveRefresh('dashboard', refreshDashboardPage);
     }
 
     function bindDashboardFilters() {
@@ -1111,7 +1336,7 @@
         });
     }
 
-    function setDocumentFilter(filter) {
+    function setDocumentFilter(filter, options = {}) {
         appState.documentFilter = filter;
 
         qsa('[data-document-filter]').forEach((item) => {
@@ -1124,7 +1349,7 @@
             item.setAttribute('aria-pressed', String(isActive));
         });
 
-        renderCompanyDocuments();
+        renderCompanyDocuments({ silent: Boolean(options.silent) });
     }
 
     function ensureProfileDrawer() {
@@ -1294,7 +1519,8 @@
         bindProfileDrawer();
         bindProfileForms();
         bindNotifications();
-        refreshNotifications();
+        refreshNotifications({ silent: true });
+        startLiveRefresh('notifications', refreshNotifications, 12000);
         bindLogout();
     }
 
@@ -1359,24 +1585,33 @@
         });
     }
 
-    async function refreshNotifications() {
+    async function refreshNotifications(options = {}) {
         const lists = qsa('[data-notification-list]');
+        const silent = Boolean(options.silent);
 
         if (!lists.length) {
             return;
         }
 
-        lists.forEach((list) => {
-            list.innerHTML = '<div class="notification-empty">Caricamento...</div>';
-        });
+        if (silent && shouldSkipSilentRefresh()) {
+            return;
+        }
+
+        if (!silent) {
+            lists.forEach((list) => {
+                list.innerHTML = '<div class="notification-empty">Caricamento...</div>';
+            });
+        }
 
         try {
             const data = await api('/notifications');
             renderNotifications(data);
         } catch (error) {
-            lists.forEach((list) => {
-                list.innerHTML = `<div class="notification-empty">${escapeHtml(error.message)}</div>`;
-            });
+            if (!silent) {
+                lists.forEach((list) => {
+                    list.innerHTML = `<div class="notification-empty">${escapeHtml(error.message)}</div>`;
+                });
+            }
         }
     }
 
@@ -1454,14 +1689,21 @@
         return 'i';
     }
 
-    async function refreshDashboardPage() {
+    async function refreshDashboardPage(options = {}) {
         const container = qs('[data-company-documents]');
         const summary = qs('[data-dashboard-summary]');
         const expiring = qs('[data-expiring-documents]');
+        const silent = Boolean(options.silent);
 
-        container.innerHTML = '<div class="spinner">Caricamento...</div>';
-        summary.innerHTML = '<div class="summary-skeleton">Caricamento...</div>';
-        expiring.innerHTML = '<div class="spinner small">Caricamento...</div>';
+        if (silent && shouldSkipSilentRefresh()) {
+            return;
+        }
+
+        if (!silent) {
+            container.innerHTML = '<div class="spinner">Caricamento...</div>';
+            summary.innerHTML = '<div class="summary-skeleton">Caricamento...</div>';
+            expiring.innerHTML = '<div class="spinner small">Caricamento...</div>';
+        }
 
         const [dashboard, documents] = await Promise.all([
             api('/dashboard'),
@@ -1469,12 +1711,12 @@
         ]);
 
         appState.companyDocuments = documents.documents;
-        renderDashboardSummary(dashboard.summary);
+        renderDashboardSummary(dashboard.summary, { silent });
         renderExpiringDocuments(dashboard.expiring_documents);
-        renderCompanyDocuments();
+        renderCompanyDocuments({ silent });
     }
 
-    function renderDashboardSummary(summary) {
+    function renderDashboardSummary(summary, options = {}) {
         const container = qs('[data-dashboard-summary]');
 
         if (!container) {
@@ -1486,6 +1728,7 @@
             ['In attesa', summary.pending, 'pending', 'pending'],
             ['Approvati', summary.approved, 'approved', 'approved'],
             ['Respinti', summary.rejected, 'rejected', 'rejected'],
+            ['Scaduti', summary.expired || 0, 'expired', 'expired'],
             ['In scadenza', summary.expiring, 'warning', 'expiring'],
         ];
 
@@ -1502,7 +1745,7 @@
             });
         });
 
-        setDocumentFilter(appState.documentFilter);
+        setDocumentFilter(appState.documentFilter, { silent: Boolean(options.silent) });
     }
 
     function renderExpiringDocuments(documents) {
@@ -1533,7 +1776,7 @@
         }).join('');
     }
 
-    function renderCompanyDocuments() {
+    function renderCompanyDocuments(options = {}) {
         const container = qs('[data-company-documents]');
 
         if (!container) {
@@ -1546,6 +1789,7 @@
             type: 'company',
             refresh: refreshDashboardPage,
             emptyMessage: 'Nessun documento trovato con questo filtro.',
+            silent: options.silent,
         });
     }
 
@@ -1560,8 +1804,13 @@
                 const info = expiryInfo(uploaded?.expiry_date);
                 const internalInfo = expiryInfo(uploaded?.internal_expiry_date);
 
-                return item.status === 'approved' && ((info && info.days <= 60) || (internalInfo && internalInfo.days <= 60));
+                return item.status === 'approved' && ((info && info.days >= 0 && info.days <= 60) || (internalInfo && internalInfo.days >= 0 && internalInfo.days <= 60));
             });
+        }
+
+        if (filter === 'missing') {
+            return documents.filter((item) => ['missing', 'expired'].includes(item.status || 'missing')
+                || (item.subdocuments || []).some((subitem) => ['missing', 'expired'].includes(subitem.status || 'missing')));
         }
 
         return documents.filter((item) => (item.status || 'missing') === filter
@@ -1578,11 +1827,20 @@
         bindEntityForm('/employees', '[data-employee-form]', refreshEmployees);
         qs('[data-employee-search]')?.addEventListener('input', renderEmployees);
         await refreshEmployees();
+        startLiveRefresh('employees', refreshEmployees);
     }
 
-    async function refreshEmployees() {
+    async function refreshEmployees(options = {}) {
         const container = qs('[data-employees]');
-        container.innerHTML = '<div class="spinner">Caricamento...</div>';
+        const silent = Boolean(options.silent);
+
+        if (silent && shouldSkipSilentRefresh()) {
+            return;
+        }
+
+        if (!silent) {
+            container.innerHTML = '<div class="spinner">Caricamento...</div>';
+        }
 
         const data = await api('/employees');
         appState.employees = data.employees;
@@ -1629,11 +1887,20 @@
         bindEntityForm('/vehicles', '[data-vehicle-form]', refreshVehicles);
         qs('[data-vehicle-search]')?.addEventListener('input', renderVehicles);
         await refreshVehicles();
+        startLiveRefresh('vehicles', refreshVehicles);
     }
 
-    async function refreshVehicles() {
+    async function refreshVehicles(options = {}) {
         const container = qs('[data-vehicles]');
-        container.innerHTML = '<div class="spinner">Caricamento...</div>';
+        const silent = Boolean(options.silent);
+
+        if (silent && shouldSkipSilentRefresh()) {
+            return;
+        }
+
+        if (!silent) {
+            container.innerHTML = '<div class="spinner">Caricamento...</div>';
+        }
 
         const data = await api('/vehicles');
         appState.vehicles = data.vehicles;
@@ -1725,7 +1992,7 @@
             return null;
         }
 
-        const loaded = documents.filter((item) => item.uploaded_document).length;
+        const loaded = documents.filter((item) => item.uploaded_document && item.status !== 'expired').length;
         const approved = documents.filter((item) => item.status === 'approved').length;
         const pending = documents.filter((item) => item.status === 'pending').length;
         const rejected = documents.filter((item) => item.status === 'rejected').length;
@@ -1920,6 +2187,7 @@
                 id: options.id,
                 endpoint: options.endpoint,
                 refresh,
+                silent: true,
             });
         };
 

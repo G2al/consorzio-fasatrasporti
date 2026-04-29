@@ -19,4 +19,9 @@ class Section extends Model
     {
         return $this->hasMany(DocumentTemplate::class);
     }
+
+    public function documentCategories(): HasMany
+    {
+        return $this->hasMany(DocumentCategory::class);
+    }
 }

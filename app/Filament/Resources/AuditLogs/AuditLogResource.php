@@ -3,9 +3,12 @@
 namespace App\Filament\Resources\AuditLogs;
 
 use App\Filament\Resources\AuditLogs\Pages\ManageAuditLogs;
+use App\Filament\Resources\DocumentApprovals\DocumentApprovalResource;
 use App\Models\AuditLog;
+use App\Models\UploadedDocument;
 use App\Models\User;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -96,6 +99,23 @@ class AuditLogResource extends Resource
                         ->map(fn (string $action): string => AuditLog::labelForAction($action))
                         ->all())
                     ->searchable(),
+            ])
+            ->recordActions([
+                Action::make('download_document')
+                    ->label('Scarica')
+                    ->icon(Heroicon::OutlinedArrowDownTray)
+                    ->iconButton()
+                    ->color('gray')
+                    ->visible(fn (AuditLog $record): bool => $record->auditable instanceof UploadedDocument && filled($record->auditable->file_path))
+                    ->url(fn (AuditLog $record): string => route('admin.downloads.documents.show', $record->auditable))
+                    ->openUrlInNewTab(),
+                Action::make('review_document')
+                    ->label('Revisiona')
+                    ->icon(Heroicon::OutlinedEye)
+                    ->iconButton()
+                    ->color('primary')
+                    ->visible(fn (AuditLog $record): bool => $record->auditable instanceof UploadedDocument)
+                    ->url(fn (AuditLog $record): string => DocumentApprovalResource::getUrl('index', ['tableSearch' => (string) $record->auditable_id])),
             ]);
     }
 

@@ -37,5 +37,6 @@ Route::middleware('auth:company_api')->group(function () {
     Route::get('/vehicles/{vehicle}/documents', [DocumentController::class, 'vehicleDocuments']);
 
     Route::post('/documents', [DocumentController::class, 'upload'])->middleware('throttle:30,1');
+    Route::post('/document-integrations', [DocumentController::class, 'requestIntegrations'])->middleware('throttle:30,1');
     Route::post('/document-exemptions', [DocumentController::class, 'requestExemption'])->middleware('throttle:30,1');
 });

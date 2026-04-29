@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\AuditLog;
+use App\Models\DocumentCategory;
 use App\Models\DocumentExemption;
+use App\Models\DocumentTemplate;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -242,6 +244,131 @@ class CompanyApiTest extends TestCase
             ])
             ->assertNotFound();
     }
+
+    public function test_expired_approved_document_returns_to_upload_without_deleting_old_file(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        $this->postJson('/api/register', [
+            'name' => 'Scadenza Demo SRL',
+            'responsible_name' => 'Mario Rossi',
+            'vat_number' => '11122233344',
+            'email' => 'scadenza@example.com',
+            'password' => 'Password1',
+            'password_confirmation' => 'Password1',
+        ])->assertCreated();
+
+        $token = $this->approveAndLogin('scadenza@example.com');
+        $company = User::query()->where('email', 'scadenza@example.com')->firstOrFail();
+        $template = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        Storage::disk('public')->put('uploaded-documents/scadenza/vecchio.pdf', 'old');
+
+        $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/scadenza/vecchio.pdf',
+            'status' => 'approved',
+            'has_expiry' => true,
+            'expiry_date' => now()->subDay()->toDateString(),
+            'approved_at' => now()->subMonth(),
+        ]);
+
+        $documents = $this->withToken($token)
+            ->getJson('/api/company/documents')
+            ->assertOk()
+            ->json('documents');
+        $expiredDocument = collect($documents)
+            ->firstWhere('template.id', $template->id);
+
+        $this->assertSame('expired', $expiredDocument['status']);
+        $this->assertTrue($expiredDocument['uploaded_document']['is_expired']);
+
+        $this->withToken($token)
+            ->post('/api/documents', [
+                'template_id' => $template->id,
+                'documentable_type' => 'company',
+                'has_expiry' => '0',
+                'file' => UploadedFile::fake()->create('nuovo.pdf', 24, 'application/pdf'),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('document.status', 'pending');
+
+        Storage::disk('public')->assertExists('uploaded-documents/scadenza/vecchio.pdf');
+        $this->assertSame(2, $company->documents()->where('template_id', $template->id)->count());
+    }
+
+    public function test_company_can_upload_multiple_integrations_for_approved_document(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        $this->postJson('/api/register', [
+            'name' => 'Integrazioni Demo SRL',
+            'responsible_name' => 'Mario Rossi',
+            'vat_number' => '22233344455',
+            'email' => 'integrazioni@example.com',
+            'password' => 'Password1',
+            'password_confirmation' => 'Password1',
+        ])->assertCreated();
+
+        $token = $this->approveAndLogin('integrazioni@example.com');
+        $company = User::query()->where('email', 'integrazioni@example.com')->firstOrFail();
+        $template = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+        $category = DocumentCategory::query()->create([
+            'section_id' => $template->section_id,
+            'name' => 'Sicurezza',
+            'sort_order' => 1,
+        ]);
+        $template->update(['category_id' => $category->id]);
+
+        Storage::disk('public')->put('uploaded-documents/integrazioni/padre.pdf', 'parent');
+
+        $parent = $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/integrazioni/padre.pdf',
+            'status' => 'approved',
+            'has_expiry' => false,
+            'approved_at' => now(),
+        ]);
+
+        $this->withToken($token)
+            ->post('/api/document-integrations', [
+                'template_id' => $template->id,
+                'documentable_type' => 'company',
+                'integration_notes' => 'Documenti integrativi richiesti.',
+                'files' => [
+                    UploadedFile::fake()->create('integrazione-a.pdf', 24, 'application/pdf'),
+                    UploadedFile::fake()->create('integrazione-b.pdf', 24, 'application/pdf'),
+                ],
+            ])
+            ->assertCreated()
+            ->assertJsonCount(2, 'documents')
+            ->assertJsonPath('documents.0.status', 'pending')
+            ->assertJsonPath('documents.0.parent_uploaded_document_id', $parent->id)
+            ->assertJsonPath('documents.0.is_integration', true)
+            ->assertJsonPath('documents.0.has_expiry', false);
+
+        $this->assertSame('approved', $parent->fresh()->status);
+        $this->assertSame(2, UploadedDocument::query()
+            ->where('parent_uploaded_document_id', $parent->id)
+            ->where('status', 'pending')
+            ->count());
+
+        $documents = $this->withToken($token)
+            ->getJson('/api/company/documents')
+            ->assertOk()
+            ->json('documents');
+        $document = collect($documents)->firstWhere('template.id', $template->id);
+
+        $this->assertSame('Sicurezza', $document['template']['category']['name']);
+        $this->assertCount(2, $document['uploaded_document']['integrations']);
+    }
+
 
     public function test_company_can_update_profile_and_password(): void
     {

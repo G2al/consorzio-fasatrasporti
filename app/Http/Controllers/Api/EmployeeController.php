@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\DocumentTemplate;
 use App\Models\Employee;
+use App\Models\UploadedDocument;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class EmployeeController extends Controller
 {
@@ -83,15 +85,17 @@ class EmployeeController extends Controller
 
     private function payload(Employee $employee, ?int $requiredDocumentsCount = null): array
     {
+        $currentStatuses = $this->currentDocumentStatuses($employee);
+
         return [
             'id' => $employee->id,
             'first_name' => $employee->first_name,
             'last_name' => $employee->last_name,
             'phone' => $employee->phone,
-            'documents_count' => $employee->documents_count ?? $employee->documents()->count(),
-            'approved_documents_count' => $employee->approved_documents_count ?? $employee->documents()->where('status', 'approved')->count(),
-            'pending_documents_count' => $employee->pending_documents_count ?? $employee->documents()->where('status', 'pending')->count(),
-            'rejected_documents_count' => $employee->rejected_documents_count ?? $employee->documents()->where('status', 'rejected')->count(),
+            'documents_count' => $currentStatuses->reject(fn (string $status): bool => in_array($status, ['missing', 'expired'], true))->count(),
+            'approved_documents_count' => $currentStatuses->filter(fn (string $status): bool => $status === 'approved')->count(),
+            'pending_documents_count' => $currentStatuses->filter(fn (string $status): bool => $status === 'pending')->count(),
+            'rejected_documents_count' => $currentStatuses->filter(fn (string $status): bool => $status === 'rejected')->count(),
             'required_documents_count' => max(($requiredDocumentsCount ?? $this->requiredDocumentsCount()) - $employee->documentExemptions()
                 ->where('status', 'approved')
                 ->whereNull('subtemplate_id')
@@ -115,5 +119,34 @@ class EmployeeController extends Controller
         return DocumentTemplate::query()
             ->whereHas('section', fn ($query) => $query->where('slug', 'dipendenti'))
             ->count();
+    }
+
+    private function currentDocumentStatuses(Employee $employee): Collection
+    {
+        $documents = $employee->documents()
+            ->whereNull('parent_uploaded_document_id')
+            ->latest('updated_at')
+            ->get()
+            ->whereNull('subtemplate_id')
+            ->groupBy('template_id');
+
+        return DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'dipendenti'))
+            ->get()
+            ->map(function (DocumentTemplate $template) use ($documents): string {
+                $document = $this->currentDocument($documents->get($template->id));
+
+                return $document?->effectiveStatus() ?? 'missing';
+            });
+    }
+
+    private function currentDocument(?Collection $documents): ?UploadedDocument
+    {
+        if (! $documents || $documents->isEmpty()) {
+            return null;
+        }
+
+        return $documents->first(fn (UploadedDocument $document): bool => ! $document->isExpired())
+            ?: $documents->first();
     }
 }

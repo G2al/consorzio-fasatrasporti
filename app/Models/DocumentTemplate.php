@@ -13,6 +13,7 @@ class DocumentTemplate extends Model
 
     protected $fillable = [
         'section_id',
+        'category_id',
         'name',
         'is_required',
         'description',
@@ -28,6 +29,11 @@ class DocumentTemplate extends Model
     public function section(): BelongsTo
     {
         return $this->belongsTo(Section::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(DocumentCategory::class, 'category_id');
     }
 
     public function uploadedDocuments(): HasMany

@@ -2,14 +2,33 @@
     @php
         $summary = $this->summary();
         $statusClass = fn (string $status): string => str_replace('_', '-', $status);
+        $cards = [
+            ['filter' => 'all', 'label' => 'Totali', 'value' => $summary['total'], 'tone' => 'all'],
+            ['filter' => 'missing', 'label' => 'Mancanti', 'value' => $summary['missing'], 'tone' => 'missing'],
+            ['filter' => 'pending', 'label' => 'In attesa', 'value' => $summary['pending'], 'tone' => 'pending'],
+            ['filter' => 'approved', 'label' => 'Approvati', 'value' => $summary['approved'], 'tone' => 'approved'],
+            ['filter' => 'rejected', 'label' => 'Respinti', 'value' => $summary['rejected'], 'tone' => 'rejected'],
+            ['filter' => 'expired', 'label' => 'Scaduti', 'value' => $summary['expired'], 'tone' => 'expired'],
+            ['filter' => 'expiring', 'label' => 'In scadenza', 'value' => $summary['expiring'], 'tone' => 'expiring'],
+            ['filter' => 'exemptions', 'label' => 'Esenzioni', 'value' => $summary['exemptions'], 'tone' => 'exemptions'],
+        ];
     @endphp
 
     <style>
         .docs-overview { display: grid; gap: 18px; }
-        .docs-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
-        .docs-summary-card { border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: white; padding: 12px 14px; }
+        .docs-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+        .docs-summary-card { display: block; border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: white; padding: 12px 14px; text-decoration: none; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+        .docs-summary-card:hover { border-color: rgba(15, 118, 110, .38); background: #f8fafc; transform: translateY(-1px); }
+        .docs-summary-card.is-active { border-color: rgba(15, 118, 110, .65); background: #eef5f4; }
         .docs-summary-card span { display: block; color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; }
         .docs-summary-card strong { display: block; margin-top: 4px; color: #0f172a; font-size: 24px; line-height: 1; }
+        .docs-summary-card.missing strong,
+        .docs-summary-card.rejected strong,
+        .docs-summary-card.expired strong { color: #991b1b; }
+        .docs-summary-card.pending strong,
+        .docs-summary-card.expiring strong { color: #92400e; }
+        .docs-summary-card.approved strong,
+        .docs-summary-card.exemptions strong { color: #166534; }
         .docs-group { display: grid; gap: 14px; }
         .docs-group-title { margin: 0; color: #0f172a; font-size: 20px; font-weight: 750; }
         .docs-owner { border: 1px solid rgba(148, 163, 184, .28); border-radius: 12px; background: white; overflow: hidden; }
@@ -29,7 +48,8 @@
         .docs-status.missing { background: #f1f5f9; color: #475569; }
         .docs-status.pending { background: #fef3c7; color: #92400e; }
         .docs-status.approved { background: #dcfce7; color: #166534; }
-        .docs-status.rejected, .docs-status.exemption-rejected { background: #fee2e2; color: #991b1b; }
+        .docs-status.rejected, .docs-status.expired, .docs-status.exemption-rejected { background: #fee2e2; color: #991b1b; }
+        .docs-status.expiring { background: #ffedd5; color: #9a3412; }
         .docs-status.exemption-approved { background: #dff3e7; color: #166534; }
         .docs-status.exemption-pending { background: #e0f2fe; color: #075985; }
         .docs-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -39,6 +59,8 @@
         .dark .docs-group-title { color: #ffffff; }
         .dark .docs-summary-card,
         .dark .docs-owner { background: #111827; border-color: rgba(148, 163, 184, .22); }
+        .dark .docs-summary-card:hover,
+        .dark .docs-summary-card.is-active { background: #0f172a; border-color: rgba(45, 212, 191, .45); }
         .dark .docs-summary-card strong,
         .dark .docs-owner-head h3,
         .dark .docs-name { color: #ffffff; }
@@ -48,23 +70,27 @@
         .dark .docs-table th,
         .dark .docs-owner-head { border-color: rgba(148, 163, 184, .18); }
         @media (max-width: 1100px) {
-            .docs-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .docs-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .docs-table { min-width: 880px; }
             .docs-owner { overflow-x: auto; }
         }
     </style>
 
-    <div class="docs-overview">
+    <div class="docs-overview" wire:poll.15s>
         <div class="docs-summary">
-            <div class="docs-summary-card"><span>Totali</span><strong>{{ $summary['total'] }}</strong></div>
-            <div class="docs-summary-card"><span>Mancanti</span><strong>{{ $summary['missing'] }}</strong></div>
-            <div class="docs-summary-card"><span>In attesa</span><strong>{{ $summary['pending'] }}</strong></div>
-            <div class="docs-summary-card"><span>Approvati</span><strong>{{ $summary['approved'] }}</strong></div>
-            <div class="docs-summary-card"><span>Respinti</span><strong>{{ $summary['rejected'] }}</strong></div>
-            <div class="docs-summary-card"><span>Esenzioni</span><strong>{{ $summary['exemptions'] }}</strong></div>
+            @foreach ($cards as $card)
+                <a
+                    class="docs-summary-card {{ $card['tone'] }} {{ $this->filter === $card['filter'] ? 'is-active' : '' }}"
+                    href="{{ $this->filterUrl($card['filter']) }}"
+                    wire:navigate
+                >
+                    <span>{{ $card['label'] }}</span>
+                    <strong>{{ $card['value'] }}</strong>
+                </a>
+            @endforeach
         </div>
 
-        @foreach ($this->groups() as $group)
+        @foreach ($this->groups(filtered: true) as $group)
             <section class="docs-group">
                 <h2 class="docs-group-title">{{ $group['title'] }}</h2>
 
@@ -77,7 +103,7 @@
                                     <p>{{ $owner['meta'] }}</p>
                                 @endif
                             </div>
-                            <div class="docs-owner-count">{{ count($owner['rows']) }} documenti</div>
+                            <div class="docs-owner-count">{{ count($owner['rows']) }} documenti visibili</div>
                         </div>
 
                         @if ($owner['rows'] === [])
@@ -107,7 +133,7 @@
                     </article>
                 @empty
                     <article class="docs-owner">
-                        <div class="docs-empty">Nessun elemento presente.</div>
+                        <div class="docs-empty">Nessun elemento presente per questo filtro.</div>
                     </article>
                 @endforelse
             </section>

@@ -655,6 +655,7 @@ select {
 }
 
 .summary-card.missing strong,
+.summary-card.expired strong,
 .summary-card.rejected strong {
     color: var(--danger);
 }
@@ -872,6 +873,7 @@ select {
 }
 
 .document-card.is-missing::before,
+.document-card.is-expired::before,
 .document-card.is-rejected::before {
     background: #d14b3f;
 }
@@ -1059,6 +1061,11 @@ select {
     color: var(--danger);
 }
 
+.status.expired {
+    background: #fde2df;
+    color: var(--danger);
+}
+
 .status.exemption_pending {
     background: #e8edf5;
     color: #475569;
@@ -1099,7 +1106,8 @@ select {
 }
 
 .upload-form,
-.exemption-form {
+.exemption-form,
+.integration-form {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 10px;
@@ -1115,6 +1123,61 @@ select {
     border: 1px solid rgba(144, 160, 154, 0.24);
     border-radius: 8px;
     background: #f8faf9;
+}
+
+.document-category-block {
+    display: grid;
+    gap: 10px;
+    border: 1px solid rgba(144, 160, 154, 0.28);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 12px;
+}
+
+.document-category-header {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    padding: 4px 0;
+    text-align: left;
+    cursor: pointer;
+}
+
+.document-category-header span {
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.document-category-header strong {
+    display: inline-flex;
+    min-width: 34px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #eef5f4;
+    color: var(--primary);
+    font-size: 13px;
+}
+
+.document-category-description {
+    margin: -4px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.document-category-body {
+    display: none;
+    gap: 12px;
+}
+
+.document-category-body.is-open {
+    display: grid;
 }
 
 .subdocument-list {
@@ -1203,7 +1266,9 @@ select {
 
 .upload-form .upload-progress,
 .upload-form .file-field,
-.exemption-form .field {
+.exemption-form .field,
+.integration-form .field,
+.integration-form .upload-progress {
     grid-column: 1 / -1;
 }
 

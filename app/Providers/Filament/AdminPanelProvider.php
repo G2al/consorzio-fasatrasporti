@@ -11,11 +11,13 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Support\HtmlString;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
@@ -44,6 +46,83 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('Impostazioni')
                     ->collapsed(),
             ])
+            ->renderHook(
+                PanelsRenderHook::BODY_END,
+                fn (): HtmlString => new HtmlString(<<<'HTML'
+                    <script>
+                        (() => {
+                            const endpoint = '/admin/document-approvals/pending-count';
+                            const targetPath = '/admin/document-approvals';
+
+                            function approvalLinks() {
+                                return Array.from(document.querySelectorAll('a.fi-sidebar-item-btn[href]'))
+                                    .filter((link) => {
+                                        try {
+                                            return new URL(link.href).pathname.replace(/\/$/, '') === targetPath;
+                                        } catch (error) {
+                                            return false;
+                                        }
+                                    });
+                            }
+
+                            function ensureBadge(link) {
+                                let container = link.querySelector('[data-live-approval-badge]');
+
+                                if (container) {
+                                    return container;
+                                }
+
+                                const existingContainer = link.querySelector('.fi-sidebar-item-badge-ctn');
+
+                                if (existingContainer) {
+                                    existingContainer.dataset.liveApprovalBadge = 'true';
+                                    return existingContainer;
+                                }
+
+                                container = document.createElement('span');
+                                container.dataset.liveApprovalBadge = 'true';
+                                container.className = 'fi-sidebar-item-badge-ctn';
+                                container.innerHTML = '<span class="fi-badge fi-color-danger">0</span>';
+                                link.appendChild(container);
+
+                                return container;
+                            }
+
+                            function setBadge(count) {
+                                approvalLinks().forEach((link) => {
+                                    const container = ensureBadge(link);
+                                    const badge = container.querySelector('.fi-badge') || container;
+
+                                    container.hidden = count <= 0;
+                                    badge.textContent = String(count);
+                                });
+                            }
+
+                            async function refreshBadge() {
+                                try {
+                                    const response = await fetch(endpoint, {
+                                        headers: { Accept: 'application/json' },
+                                        credentials: 'same-origin',
+                                    });
+
+                                    if (!response.ok) {
+                                        return;
+                                    }
+
+                                    const data = await response.json();
+                                    setBadge(Number(data.count || 0));
+                                } catch (error) {
+                                    // Silenzioso: il badge non deve disturbare il lavoro nel pannello.
+                                }
+                            }
+
+                            document.addEventListener('DOMContentLoaded', refreshBadge);
+                            document.addEventListener('livewire:navigated', refreshBadge);
+                            window.setInterval(refreshBadge, 10000);
+                        })();
+                    </script>
+                HTML),
+            )
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

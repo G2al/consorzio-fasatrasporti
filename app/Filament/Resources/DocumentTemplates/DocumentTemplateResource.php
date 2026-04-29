@@ -7,6 +7,7 @@ use App\Filament\Resources\DocumentTemplates\Pages\ManageDocumentTemplates;
 use App\Filament\Resources\DocumentTemplates\Pages\TemplateCompanies;
 use App\Filament\Resources\DocumentTemplates\RelationManagers\SubtemplatesRelationManager;
 use App\Models\DocumentTemplate;
+use App\Models\DocumentCategory;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -18,6 +19,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -54,6 +56,18 @@ class DocumentTemplateResource extends Resource
                     ->label('Sezione')
                     ->relationship('section', 'name')
                     ->required()
+                    ->live()
+                    ->preload()
+                    ->searchable(),
+                Select::make('category_id')
+                    ->label('Categoria')
+                    ->options(fn (Get $get): array => DocumentCategory::query()
+                        ->when($get('section_id'), fn ($query, $sectionId) => $query->where('section_id', $sectionId))
+                        ->orderBy('sort_order')
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->all())
+                    ->helperText('Facoltativa: nel frontend i documenti con categoria vengono raggruppati in blocchi.')
                     ->preload()
                     ->searchable(),
                 TextInput::make('name')
@@ -80,6 +94,10 @@ class DocumentTemplateResource extends Resource
                 TextColumn::make('name')
                     ->label('Nome')
                     ->searchable()
+                    ->sortable(),
+                TextColumn::make('category.name')
+                    ->label('Categoria')
+                    ->placeholder('Primario')
                     ->sortable(),
                 IconColumn::make('is_required')
                     ->label('Obbligatorio')

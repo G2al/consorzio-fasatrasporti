@@ -56,6 +56,25 @@ class DocumentApprovalResource extends Resource
         return in_array(auth('admin')->user()?->role, ['admin', 'reviewer'], true);
     }
 
+    public static function getNavigationBadge(): ?string
+    {
+        $count = UploadedDocument::query()
+            ->where('status', 'pending')
+            ->count();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'danger';
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        return 'Documenti in attesa di approvazione';
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema
@@ -98,6 +117,7 @@ class DocumentApprovalResource extends Resource
             ->with([
                 'template.section',
                 'subtemplate',
+                'parentDocument',
                 'documentable' => fn (MorphTo $morphTo): MorphTo => $morphTo->morphWith([
                     Employee::class => ['user'],
                     Vehicle::class => ['user'],
@@ -108,7 +128,10 @@ class DocumentApprovalResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultSort('created_at', 'desc')
+            ->poll('10s')
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->orderByRaw("case status when 'pending' then 0 when 'rejected' then 1 when 'approved' then 2 else 3 end")
+                ->orderByDesc('created_at'))
             ->columns([
                 TextColumn::make('id')
                     ->label('ID')
@@ -121,21 +144,28 @@ class DocumentApprovalResource extends Resource
                 TextColumn::make('template.name')
                     ->label('Documento')
                     ->searchable()
-                    ->description(fn (UploadedDocument $record): ?string => $record->subtemplate?->name ? 'Sottodocumento: '.$record->subtemplate->name : null),
+                    ->description(fn (UploadedDocument $record): ?string => match (true) {
+                        $record->isIntegration() => 'Integrazione: '.($record->integration_name ?: 'senza nome'),
+                        filled($record->subtemplate?->name) => 'Sottodocumento: '.$record->subtemplate->name,
+                        default => null,
+                    }),
                 TextColumn::make('company_display')
                     ->label('Società / elemento')
                     ->state(fn (UploadedDocument $record): string => static::companyLabel($record))
                     ->description(fn (UploadedDocument $record): ?string => static::elementDescription($record)),
                 TextColumn::make('status')
                     ->label('Stato')
+                    ->state(fn (UploadedDocument $record): string => $record->effectiveStatus())
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'approved' => 'Approvato',
+                        'expired' => 'Scaduto',
                         'rejected' => 'Respinto',
                         default => 'In attesa',
                     })
                     ->color(fn (string $state): string => match ($state) {
                         'approved' => 'success',
+                        'expired' => 'danger',
                         'rejected' => 'danger',
                         default => 'warning',
                     }),
@@ -229,11 +259,11 @@ class DocumentApprovalResource extends Resource
             ->recordActions([
                 Action::make('download')
                     ->label('Scarica')
-                    ->tooltip('Scarica documento approvato')
+                    ->tooltip('Scarica documento')
                     ->icon(Heroicon::OutlinedArrowDownTray)
                     ->iconButton()
                     ->color('gray')
-                    ->visible(fn (UploadedDocument $record): bool => $record->status === 'approved')
+                    ->visible(fn (UploadedDocument $record): bool => filled($record->file_path))
                     ->url(fn (UploadedDocument $record): string => route('admin.downloads.documents.show', $record))
                     ->openUrlInNewTab(),
                 Action::make('review')
@@ -300,20 +330,20 @@ class DocumentApprovalResource extends Resource
                                     ->label('Il documento ha scadenza')
                                     ->helperText('Se la data non e corretta, modificala e approva.')
                                     ->live()
-                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id)),
+                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && ! $record->isIntegration()),
                                 DatePicker::make('expiry_date')
                                     ->label('Scadenza')
-                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && (bool) $get('has_expiry'))
-                                    ->required(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && (bool) $get('has_expiry')),
+                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && ! $record->isIntegration() && (bool) $get('has_expiry'))
+                                    ->required(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && ! $record->isIntegration() && (bool) $get('has_expiry')),
                                 TextInput::make('internal_expiry_name')
                                     ->label('Requisito interno')
                                     ->helperText('Seconda scadenza opzionale dentro lo stesso documento, es. CQC.')
                                     ->maxLength(255)
-                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id)),
+                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && ! $record->isIntegration()),
                                 DatePicker::make('internal_expiry_date')
                                     ->label('Scadenza requisito')
-                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id))
-                                    ->required(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && filled($get('internal_expiry_name'))),
+                                    ->visible(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && ! $record->isIntegration())
+                                    ->required(fn (Get $get, UploadedDocument $record): bool => $get('decision') === 'approve' && blank($record->subtemplate_id) && ! $record->isIntegration() && filled($get('internal_expiry_name'))),
                                 Textarea::make('admin_notes')
                                     ->label('Note di rifiuto')
                                     ->helperText('Usa il respingimento solo se il file e errato, incompleto o non pertinente.')
@@ -344,14 +374,14 @@ class DocumentApprovalResource extends Resource
                     ])
                     ->action(function (UploadedDocument $record, array $data): void {
                         if (($data['decision'] ?? null) === 'approve') {
-                            $hasExpiry = blank($record->subtemplate_id) && (bool) ($data['has_expiry'] ?? false);
+                            $hasExpiry = blank($record->subtemplate_id) && ! $record->isIntegration() && (bool) ($data['has_expiry'] ?? false);
 
                             $record->update([
                                 'status' => 'approved',
                                 'has_expiry' => $hasExpiry,
                                 'expiry_date' => $hasExpiry ? ($data['expiry_date'] ?? null) : null,
-                                'internal_expiry_name' => blank($record->subtemplate_id) && filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_name'] : null,
-                                'internal_expiry_date' => blank($record->subtemplate_id) && filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_date'] : null,
+                                'internal_expiry_name' => blank($record->subtemplate_id) && ! $record->isIntegration() && filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_name'] : null,
+                                'internal_expiry_date' => blank($record->subtemplate_id) && ! $record->isIntegration() && filled($data['internal_expiry_name'] ?? null) && filled($data['internal_expiry_date'] ?? null) ? $data['internal_expiry_date'] : null,
                                 'approved_at' => now(),
                                 'admin_notes' => null,
                             ]);
@@ -430,6 +460,10 @@ class DocumentApprovalResource extends Resource
 
     protected static function documentName(UploadedDocument $record): string
     {
+        if ($record->isIntegration()) {
+            return $record->template->name.' / Integrazione: '.($record->integration_name ?: 'senza nome');
+        }
+
         return $record->subtemplate
             ? $record->template->name.' / '.$record->subtemplate->name
             : $record->template->name;

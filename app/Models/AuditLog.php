@@ -58,6 +58,7 @@ class AuditLog extends Model
             'vehicle.updated' => 'Veicolo aggiornato',
             'vehicle.deleted' => 'Veicolo eliminato',
             'document.uploaded' => 'Documento caricato',
+            'document.integration_uploaded' => 'Integrazione caricata',
             'document.approved' => 'Documento approvato',
             'document.rejected' => 'Documento respinto',
             'document_exemption.requested' => 'Esenzione richiesta',
