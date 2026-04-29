@@ -130,6 +130,13 @@ class UserResource extends Resource
                     ->visible(fn (User $record): bool => $record->role === 'company')
                     ->url(fn (User $record): string => route('admin.downloads.companies.show', [$record, 'all']))
                     ->openUrlInNewTab(),
+                Action::make('downloadPdf')
+                    ->label('PDF riepilogo')
+                    ->icon(Heroicon::OutlinedDocumentText)
+                    ->color('gray')
+                    ->visible(fn (User $record): bool => $record->role === 'company')
+                    ->url(fn (User $record): string => route('admin.downloads.companies.pdf', [$record, 'all']))
+                    ->openUrlInNewTab(),
                 Action::make('documentOverview')
                     ->label('Panoramica')
                     ->icon(Heroicon::OutlinedClipboardDocumentList)

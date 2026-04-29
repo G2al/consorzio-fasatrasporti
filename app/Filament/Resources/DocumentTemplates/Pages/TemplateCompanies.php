@@ -54,6 +54,24 @@ class TemplateCompanies extends Page implements HasTable
         return 'Societa';
     }
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('downloadApproved')
+                ->label('ZIP approvati')
+                ->icon(Heroicon::OutlinedArrowDownTray)
+                ->color('gray')
+                ->url(fn (): string => route('admin.downloads.templates.show', $this->record))
+                ->openUrlInNewTab(),
+            Action::make('downloadApprovedPdf')
+                ->label('PDF approvati')
+                ->icon(Heroicon::OutlinedDocumentText)
+                ->color('gray')
+                ->url(fn (): string => route('admin.downloads.templates.pdf', $this->record))
+                ->openUrlInNewTab(),
+        ];
+    }
+
     public function getTabs(): array
     {
         return [

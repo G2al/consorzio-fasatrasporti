@@ -221,6 +221,11 @@ class AdminPanelTest extends TestCase
             ->assertOk()
             ->assertDownload();
 
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.downloads.companies.pdf', [$company, 'all']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
         $document->forceFill([
             'status' => 'approved',
             'approved_at' => now(),
@@ -230,6 +235,11 @@ class AdminPanelTest extends TestCase
             ->get(route('admin.downloads.templates.show', $template))
             ->assertOk()
             ->assertDownload();
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.downloads.templates.pdf', $template))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
 
         UploadedDocument::query()->whereKey($document->id)->delete();
     }

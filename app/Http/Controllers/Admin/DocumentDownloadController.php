@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Support\SimplePdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -53,6 +54,31 @@ class DocumentDownloadController extends Controller
         );
     }
 
+    public function companyPdf(User $company, string $scope = 'all'): Response
+    {
+        abort_unless($company->role === 'company', Response::HTTP_NOT_FOUND);
+        abort_unless(in_array($scope, ['all', 'company', 'employees', 'vehicles'], true), Response::HTTP_NOT_FOUND);
+
+        $documents = $this->companyDocumentsQuery($company, $scope)
+            ->with(['template.section', 'subtemplate', 'documentable'])
+            ->orderBy('template_id')
+            ->orderBy('subtemplate_id')
+            ->get();
+
+        $scopeLabel = match ($scope) {
+            'company' => 'societa',
+            'employees' => 'dipendenti',
+            'vehicles' => 'veicoli',
+            default => 'tutti',
+        };
+
+        return $this->pdfResponse(
+            'Riepilogo documenti - '.$company->name,
+            $this->documentReportLines($documents),
+            'riepilogo-documenti-'.$scopeLabel.'-'.$this->slug($company->name).'.pdf',
+        );
+    }
+
     public function template(DocumentTemplate $template): BinaryFileResponse
     {
         $documents = UploadedDocument::query()
@@ -67,6 +93,22 @@ class DocumentDownloadController extends Controller
             'documenti-approvati-'.$this->slug($template->name).'.zip',
             fn (UploadedDocument $document): string => $this->templateZipPath($document),
             'Nessun documento approvato disponibile per il download.',
+        );
+    }
+
+    public function templatePdf(DocumentTemplate $template): Response
+    {
+        $documents = UploadedDocument::query()
+            ->where('template_id', $template->id)
+            ->where('status', 'approved')
+            ->with(['template.section', 'subtemplate', 'documentable'])
+            ->latest('approved_at')
+            ->get();
+
+        return $this->pdfResponse(
+            'Riepilogo approvati - '.$template->name,
+            $this->documentReportLines($documents),
+            'riepilogo-approvati-'.$this->slug($template->name).'.pdf',
         );
     }
 
@@ -144,6 +186,46 @@ class DocumentDownloadController extends Controller
     }
 
     /**
+     * @param  iterable<UploadedDocument>  $documents
+     * @return array<int, string>
+     */
+    private function documentReportLines(iterable $documents): array
+    {
+        $lines = [];
+        $index = 1;
+
+        foreach ($documents as $document) {
+            $company = $document->companyUser()?->name ?: 'Societa non disponibile';
+            $fileName = basename($document->file_path);
+            $uploadedAt = $document->created_at?->format('d/m/Y H:i') ?: '-';
+            $expiry = $document->expiry_date?->format('d/m/Y') ?: '-';
+
+            if ($document->internal_expiry_date) {
+                $expiry .= ' | '.($document->internal_expiry_name ?: 'Requisito interno').': '.$document->internal_expiry_date->format('d/m/Y');
+            }
+
+            $lines[] = "{$index}. Societa: {$company}";
+            $lines[] = '   Documento: '.$this->documentName($document);
+            $lines[] = '   Elemento: '.$this->documentOwnerLabel($document);
+            $lines[] = "   File: {$fileName}";
+            $lines[] = "   Caricato: {$uploadedAt}";
+            $lines[] = "   Scadenza: {$expiry}";
+            $lines[] = '';
+            $index++;
+        }
+
+        return $lines ?: ['Nessun documento disponibile.'];
+    }
+
+    private function pdfResponse(string $title, array $lines, string $downloadName): Response
+    {
+        return response(SimplePdf::make($title, $lines), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$downloadName.'"',
+        ]);
+    }
+
+    /**
      * @param  array<string, true>  $used
      */
     private function uniqueZipPath(string $path, array &$used): string
@@ -195,6 +277,15 @@ class DocumentDownloadController extends Controller
         ]);
 
         return $this->slug(implode('-', $parts)).($extension ? '.'.$extension : '');
+    }
+
+    private function documentName(UploadedDocument $document): string
+    {
+        return trim(implode(' / ', array_filter([
+            $document->template?->name,
+            $document->subtemplate?->name,
+            $document->integration_name ? 'Integrazione: '.$document->integration_name : null,
+        ])));
     }
 
     private function documentOwnerLabel(UploadedDocument $document): string

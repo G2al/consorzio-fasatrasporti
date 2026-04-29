@@ -122,6 +122,12 @@ class DocumentTemplateResource extends Resource
                     ->color('gray')
                     ->url(fn (DocumentTemplate $record): string => route('admin.downloads.templates.show', $record))
                     ->openUrlInNewTab(),
+                Action::make('downloadApprovedPdf')
+                    ->label('PDF approvati')
+                    ->icon(Heroicon::OutlinedDocumentText)
+                    ->color('gray')
+                    ->url(fn (DocumentTemplate $record): string => route('admin.downloads.templates.pdf', $record))
+                    ->openUrlInNewTab(),
                 DeleteAction::make(),
             ])
             ->toolbarActions([

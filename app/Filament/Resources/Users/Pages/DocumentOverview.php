@@ -68,6 +68,12 @@ class DocumentOverview extends Page
                 ->color('gray')
                 ->url(fn (): string => route('admin.downloads.companies.show', [$this->record, 'all']))
                 ->openUrlInNewTab(),
+            Action::make('downloadPdf')
+                ->label('PDF riepilogo')
+                ->icon(Heroicon::OutlinedDocumentText)
+                ->color('gray')
+                ->url(fn (): string => route('admin.downloads.companies.pdf', [$this->record, 'all']))
+                ->openUrlInNewTab(),
         ];
     }
 
