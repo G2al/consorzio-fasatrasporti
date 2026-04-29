@@ -39,12 +39,16 @@ return [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
         'registration_chat_id' => env('TELEGRAM_REGISTRATION_CHAT_ID'),
         'registration_enabled' => env('TELEGRAM_REGISTRATION_ENABLED', false),
+        'expiry_bot_token' => env('TELEGRAM_EXPIRY_BOT_TOKEN'),
+        'expiry_chat_id' => env('TELEGRAM_EXPIRY_CHAT_ID'),
+        'expiry_enabled' => env('TELEGRAM_EXPIRY_ENABLED', false),
         'allow_during_tests' => env('TELEGRAM_ALLOW_DURING_TESTS', false),
     ],
 
     'documents' => [
         'rejection_mail_enabled' => env('DOCUMENT_REJECTION_MAIL_ENABLED', true),
         'upload_max_kb' => env('DOCUMENT_UPLOAD_MAX_KB', 51200),
+        'deadline_reminder_days' => env('DEADLINE_REMINDER_DAYS', '30,15'),
     ],
 
 ];
