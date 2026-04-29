@@ -74,7 +74,8 @@ class DocumentDownloadController extends Controller
 
         return $this->pdfResponse(
             'Riepilogo documenti - '.$company->name,
-            $this->documentReportLines($documents),
+            ['Societa', 'Documento', 'Sezione', 'Scadenza'],
+            $this->companyDocumentReportRows($documents),
             'riepilogo-documenti-'.$scopeLabel.'-'.$this->slug($company->name).'.pdf',
         );
     }
@@ -107,7 +108,8 @@ class DocumentDownloadController extends Controller
 
         return $this->pdfResponse(
             'Riepilogo approvati - '.$template->name,
-            $this->documentReportLines($documents),
+            ['Societa', 'Documento', 'Scadenza'],
+            $this->templateDocumentReportRows($documents),
             'riepilogo-approvati-'.$this->slug($template->name).'.pdf',
         );
     }
@@ -189,37 +191,58 @@ class DocumentDownloadController extends Controller
      * @param  iterable<UploadedDocument>  $documents
      * @return array<int, string>
      */
-    private function documentReportLines(iterable $documents): array
+    private function companyDocumentReportRows(iterable $documents): array
     {
-        $lines = [];
-        $index = 1;
+        $rows = [];
 
         foreach ($documents as $document) {
             $company = $document->companyUser()?->name ?: 'Societa non disponibile';
-            $fileName = basename($document->file_path);
-            $uploadedAt = $document->created_at?->format('d/m/Y H:i') ?: '-';
             $expiry = $document->expiry_date?->format('d/m/Y') ?: '-';
 
             if ($document->internal_expiry_date) {
                 $expiry .= ' | '.($document->internal_expiry_name ?: 'Requisito interno').': '.$document->internal_expiry_date->format('d/m/Y');
             }
 
-            $lines[] = "{$index}. Societa: {$company}";
-            $lines[] = '   Documento: '.$this->documentName($document);
-            $lines[] = '   Elemento: '.$this->documentOwnerLabel($document);
-            $lines[] = "   File: {$fileName}";
-            $lines[] = "   Caricato: {$uploadedAt}";
-            $lines[] = "   Scadenza: {$expiry}";
-            $lines[] = '';
-            $index++;
+            $rows[] = [
+                $company,
+                $this->documentName($document),
+                $this->documentSectionLabel($document),
+                $expiry,
+            ];
         }
 
-        return $lines ?: ['Nessun documento disponibile.'];
+        return $rows;
     }
 
-    private function pdfResponse(string $title, array $lines, string $downloadName): Response
+    /**
+     * @param  iterable<UploadedDocument>  $documents
+     * @return array<int, string>
+     */
+    private function templateDocumentReportRows(iterable $documents): array
     {
-        return response(SimplePdf::make($title, $lines), 200, [
+        $rows = [];
+
+        foreach ($documents as $document) {
+            $company = $document->companyUser()?->name ?: 'Societa non disponibile';
+            $expiry = $document->expiry_date?->format('d/m/Y') ?: '-';
+
+            if ($document->internal_expiry_date) {
+                $expiry .= ' | '.($document->internal_expiry_name ?: 'Requisito interno').': '.$document->internal_expiry_date->format('d/m/Y');
+            }
+
+            $rows[] = [
+                $company,
+                $this->documentName($document),
+                $expiry,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function pdfResponse(string $title, array $columns, array $rows, string $downloadName): Response
+    {
+        return response(SimplePdf::table($title, $columns, $rows), 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="'.$downloadName.'"',
         ]);
@@ -297,6 +320,18 @@ class DocumentDownloadController extends Controller
             $documentable instanceof Employee => trim($documentable->first_name.' '.$documentable->last_name),
             $documentable instanceof Vehicle => $documentable->plate.' '.$documentable->capacity.' posti',
             default => 'elemento',
+        };
+    }
+
+    private function documentSectionLabel(UploadedDocument $document): string
+    {
+        $documentable = $document->documentable;
+
+        return match (true) {
+            $documentable instanceof User => 'Societa',
+            $documentable instanceof Employee => 'Dipendenti - '.trim($documentable->first_name.' '.$documentable->last_name),
+            $documentable instanceof Vehicle => 'Veicoli - '.$documentable->plate.' ('.$documentable->capacity.' posti)',
+            default => $document->template->section?->name ?: 'Documento',
         };
     }
 
