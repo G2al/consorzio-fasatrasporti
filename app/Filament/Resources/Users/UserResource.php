@@ -10,9 +10,11 @@ use App\Filament\Resources\Users\RelationManagers\DocumentsRelationManager;
 use App\Filament\Resources\Users\RelationManagers\EmployeesRelationManager;
 use App\Filament\Resources\Users\RelationManagers\VehiclesRelationManager;
 use App\Models\User;
+use App\Services\MissingDocumentsReportService;
 use App\Services\TelegramNotifier;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Hidden;
@@ -123,28 +125,11 @@ class UserResource extends Resource
                     ->sortable(),
             ])
             ->recordActions([
-                Action::make('downloadApproved')
-                    ->label('ZIP documenti')
-                    ->icon(Heroicon::OutlinedArrowDownTray)
-                    ->color('gray')
-                    ->visible(fn (User $record): bool => $record->role === 'company')
-                    ->url(fn (User $record): string => route('admin.downloads.companies.show', [$record, 'all']))
-                    ->openUrlInNewTab(),
-                Action::make('downloadPdf')
-                    ->label('PDF riepilogo')
-                    ->icon(Heroicon::OutlinedDocumentText)
-                    ->color('gray')
-                    ->visible(fn (User $record): bool => $record->role === 'company')
-                    ->url(fn (User $record): string => route('admin.downloads.companies.pdf', [$record, 'all']))
-                    ->openUrlInNewTab(),
-                Action::make('documentOverview')
-                    ->label('Panoramica')
-                    ->icon(Heroicon::OutlinedClipboardDocumentList)
-                    ->color('gray')
-                    ->url(fn (User $record): string => static::getUrl('documents', ['record' => $record])),
                 Action::make('approve')
                     ->label('Approva')
+                    ->tooltip('Approva societa')
                     ->icon(Heroicon::OutlinedCheckCircle)
+                    ->iconButton()
                     ->color('success')
                     ->visible(fn (User $record): bool => $record->approval_status !== 'approved')
                     ->requiresConfirmation()
@@ -161,8 +146,73 @@ class UserResource extends Resource
                             ->success()
                             ->send();
                     }),
-                EditAction::make(),
-                DeleteAction::make(),
+                ActionGroup::make([
+                    Action::make('documentOverview')
+                        ->label('Panoramica documenti')
+                        ->icon(Heroicon::OutlinedClipboardDocumentList)
+                        ->color('gray')
+                        ->url(fn (User $record): string => static::getUrl('documents', ['record' => $record])),
+                    Action::make('downloadApproved')
+                        ->label('Scarica ZIP')
+                        ->icon(Heroicon::OutlinedArrowDownTray)
+                        ->color('gray')
+                        ->visible(fn (User $record): bool => $record->role === 'company')
+                        ->url(fn (User $record): string => route('admin.downloads.companies.show', [$record, 'all']))
+                        ->openUrlInNewTab(),
+                    Action::make('downloadPdf')
+                        ->label('Scarica PDF riepilogo')
+                        ->icon(Heroicon::OutlinedDocumentText)
+                        ->color('gray')
+                        ->visible(fn (User $record): bool => $record->role === 'company')
+                        ->url(fn (User $record): string => route('admin.downloads.companies.pdf', [$record, 'all']))
+                        ->openUrlInNewTab(),
+                    Action::make('sendMissingEmails')
+                        ->label('Invia email mancanti')
+                        ->icon(Heroicon::OutlinedEnvelope)
+                        ->color('warning')
+                        ->visible(fn (User $record): bool => $record->role === 'company' && filled($record->email))
+                        ->requiresConfirmation()
+                        ->modalHeading('Inviare riepilogo documenti mancanti?')
+                        ->modalDescription('Verranno inviate fino a 3 email separate alla societa: societa, dipendenti e veicoli. Le sezioni senza mancanti non vengono inviate.')
+                        ->action(function (User $record): void {
+                            $sent = app(MissingDocumentsReportService::class)->sendManual($record);
+                            $total = array_sum($sent);
+
+                            if ($total === 0) {
+                                Notification::make()
+                                    ->title('Nessuna email inviata')
+                                    ->body('Non risultano documenti mancanti o scaduti per questa societa.')
+                                    ->info()
+                                    ->send();
+
+                                return;
+                            }
+
+                            Notification::make()
+                                ->title('Email riepilogo inviate')
+                                ->body('Inclusi '.$total.' documenti: societa '.$sent['societa'].', dipendenti '.$sent['dipendenti'].', veicoli '.$sent['veicoli'].'.')
+                                ->success()
+                                ->send();
+                        }),
+                ])
+                    ->label('Documenti')
+                    ->tooltip('Documenti ed esportazioni')
+                    ->icon(Heroicon::OutlinedFolderOpen)
+                    ->iconButton()
+                    ->color('gray'),
+                ActionGroup::make([
+                    EditAction::make()
+                        ->label('Modifica')
+                        ->icon(Heroicon::OutlinedPencilSquare),
+                    DeleteAction::make()
+                        ->label('Elimina')
+                        ->icon(Heroicon::OutlinedTrash),
+                ])
+                    ->label('Azioni')
+                    ->tooltip('Azioni societa')
+                    ->icon(Heroicon::OutlinedEllipsisVertical)
+                    ->iconButton()
+                    ->color('gray'),
             ]);
     }
 

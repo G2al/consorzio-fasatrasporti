@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\DocumentTemplate;
 use App\Models\UploadedDocument;
 use App\Models\User;
+use App\Services\MissingDocumentsReportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -242,6 +243,34 @@ class AdminPanelTest extends TestCase
             ->assertHeader('content-type', 'application/pdf');
 
         UploadedDocument::query()->whereKey($document->id)->delete();
+    }
+
+    public function test_manual_missing_documents_report_sends_section_emails(): void
+    {
+        $this->seed();
+        Mail::fake();
+
+        $company = User::query()->create([
+            'name' => 'Missing Demo SRL',
+            'email' => 'missing@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $sent = app(MissingDocumentsReportService::class)->sendManual($company);
+
+        $this->assertGreaterThan(0, $sent['societa']);
+        $this->assertSame(0, $sent['dipendenti']);
+        $this->assertSame(0, $sent['veicoli']);
+
+        Mail::assertSent(\App\Mail\MissingDocumentsReportMail::class, 1);
+        Mail::assertSent(\App\Mail\MissingDocumentsReportMail::class, function ($mail): bool {
+            return $mail->hasTo('missing@example.com')
+                && $mail->sectionLabel === 'Societa'
+                && count($mail->items) > 0;
+        });
     }
 
     public function test_admin_can_open_template_companies_page(): void
