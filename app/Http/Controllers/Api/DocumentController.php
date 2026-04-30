@@ -12,6 +12,7 @@ use App\Models\Section;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\TelegramNotifier;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,8 @@ use Illuminate\Support\Facades\Storage;
 
 class DocumentController extends Controller
 {
+    public function __construct(private readonly TelegramNotifier $telegramNotifier) {}
+
     public function companyDocuments(Request $request): JsonResponse
     {
         return response()->json($this->documentsPayload('societa', $request->user()));
@@ -69,6 +72,12 @@ class DocumentController extends Controller
         abort_if($this->approvedExemptionExists($documentable, $template, $subtemplate), 422, 'Questo documento risulta esente e non puo essere caricato.');
 
         $hasExpiry = $subtemplate ? false : $request->boolean('has_expiry');
+        $previousDocument = $this->currentDocument($documentable->documents()
+            ->where('template_id', $template->id)
+            ->where('subtemplate_id', $subtemplate?->id)
+            ->whereNull('parent_uploaded_document_id')
+            ->latest('updated_at')
+            ->get());
 
         $document = $this->storeDocument(
             $documentable,
@@ -90,6 +99,11 @@ class DocumentController extends Controller
             'internal_expiry_name' => $subtemplate ? null : ($data['internal_expiry_name'] ?? null),
             'internal_expiry_date' => $subtemplate ? null : ($data['internal_expiry_date'] ?? null),
         ], actor: $request->user());
+
+        $this->telegramNotifier->notifyDocumentUploaded(
+            $document->fresh(['template.section', 'subtemplate', 'documentable']),
+            $previousDocument?->isExpired() ? 'expired_update' : ($previousDocument?->status === 'approved' ? 'replacement' : 'uploaded'),
+        );
 
         return response()->json([
             'document' => $this->uploadedDocumentPayload($document->fresh(['template'])),
@@ -201,6 +215,8 @@ class DocumentController extends Controller
                     'notes' => $data['integration_notes'] ?? null,
                     'type' => $data['documentable_type'],
                 ], actor: $request->user());
+
+                $this->telegramNotifier->notifyDocumentIntegrationUploaded($document->fresh(['template.section', 'documentable', 'parentDocument']));
 
                 return $document;
             })

@@ -447,6 +447,56 @@ class CompanyApiTest extends TestCase
         });
     }
 
+    public function test_document_upload_sends_telegram_notification_when_enabled(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        config([
+            'services.telegram.document_bot_token' => 'document-token',
+            'services.telegram.document_chat_id' => '-5224166839',
+            'services.telegram.document_enabled' => true,
+            'services.telegram.allow_during_tests' => true,
+        ]);
+
+        Http::fake([
+            'api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $this->postJson('/api/register', [
+            'name' => 'Documento Bot SRL',
+            'responsible_name' => 'Mario Rossi',
+            'vat_number' => '55544433322',
+            'email' => 'document-bot@example.com',
+            'password' => 'Password1',
+            'password_confirmation' => 'Password1',
+        ])->assertCreated();
+
+        $token = $this->approveAndLogin('document-bot@example.com');
+        $template = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        $this->withToken($token)
+            ->post('/api/documents', [
+                'template_id' => $template->id,
+                'documentable_type' => 'company',
+                'has_expiry' => '0',
+                'file' => UploadedFile::fake()->create('documento.pdf', 24, 'application/pdf'),
+            ])
+            ->assertCreated();
+
+        Http::assertSent(function ($request): bool {
+            $text = (string) $request['text'];
+
+            return $request->url() === 'https://api.telegram.org/botdocument-token/sendMessage'
+                && $request['chat_id'] === '-5224166839'
+                && str_contains($text, 'Nuovo documento caricato')
+                && str_contains($text, 'Documento Bot SRL')
+                && str_contains($text, 'in attesa di approvazione');
+        });
+    }
+
     private function approveAndLogin(string $email): string
     {
         User::query()

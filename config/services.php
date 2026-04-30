@@ -42,6 +42,9 @@ return [
         'expiry_bot_token' => env('TELEGRAM_EXPIRY_BOT_TOKEN'),
         'expiry_chat_id' => env('TELEGRAM_EXPIRY_CHAT_ID'),
         'expiry_enabled' => env('TELEGRAM_EXPIRY_ENABLED', false),
+        'document_bot_token' => env('TELEGRAM_DOCUMENT_BOT_TOKEN'),
+        'document_chat_id' => env('TELEGRAM_DOCUMENT_CHAT_ID'),
+        'document_enabled' => env('TELEGRAM_DOCUMENT_ENABLED', false),
         'allow_during_tests' => env('TELEGRAM_ALLOW_DURING_TESTS', false),
     ],
 
