@@ -59,8 +59,8 @@ class AdminPanelProvider extends PanelProvider
                                     targetPath: '/admin/document-approvals',
                                 },
                                 {
-                                    endpoint: '/admin/deletion-requests/pending-count',
-                                    targetPath: '/admin/deletion-requests',
+                                    endpoint: '/admin/entity-deletion-requests/pending-count',
+                                    targetPath: '/admin/entity-deletion-requests',
                                 },
                             ];
 

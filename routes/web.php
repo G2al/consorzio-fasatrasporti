@@ -36,9 +36,9 @@ Route::middleware('auth:admin')
     ->name('admin.document-approvals.pending-count');
 
 Route::middleware('auth:admin')
-    ->get('/admin/deletion-requests/pending-count', fn () => response()->json([
+    ->get('/admin/entity-deletion-requests/pending-count', fn () => response()->json([
         'count' => EntityDeletionRequest::query()
             ->where('status', 'pending')
             ->count(),
     ]))
-    ->name('admin.deletion-requests.pending-count');
+    ->name('admin.entity-deletion-requests.pending-count');
