@@ -999,6 +999,11 @@ select {
     text-decoration: underline;
 }
 
+.document-file-list {
+    display: grid;
+    gap: 8px;
+}
+
 .document-toggle {
     display: inline-flex;
     min-width: 56px;

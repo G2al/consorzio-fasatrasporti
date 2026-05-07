@@ -542,6 +542,33 @@
         return `<p class="meta">${parts.map(escapeHtml).join(' &middot; ')}</p>`;
     }
 
+    function documentFileLinks(uploaded, options = {}) {
+        if (!uploaded?.file_url) {
+            return '';
+        }
+
+        const files = [uploaded, ...(uploaded.attachments || [])]
+            .filter((file) => file?.file_url);
+
+        if (!files.length) {
+            return '';
+        }
+
+        if (files.length === 1) {
+            return `<a class="document-file-link" href="${escapeHtml(files[0].file_url)}" target="_blank" rel="noreferrer">${svg('file')}${escapeHtml(options.singleLabel || 'Apri file')}</a>`;
+        }
+
+        return `
+            <div class="document-file-list">
+                ${files.map((file, index) => `
+                    <a class="document-file-link" href="${escapeHtml(file.file_url)}" target="_blank" rel="noreferrer">
+                        ${svg('file')}${escapeHtml(index === 0 ? (options.primaryLabel || 'File principale') : (file.integration_name || file.file_name || `Allegato ${index + 1}`))}
+                    </a>
+                `).join('')}
+            </div>
+        `;
+    }
+
     function userDisplay() {
         try {
             const user = JSON.parse(sessionStorage.getItem(userKey) || localStorage.getItem(userKey) || '{}');
@@ -687,9 +714,7 @@
             const note = uploaded?.admin_notes
                 ? `<p class="document-note">Note: ${escapeHtml(uploaded.admin_notes)}</p>`
                 : '';
-            const file = uploaded?.file_url
-                ? `<a class="document-file-link" href="${escapeHtml(uploaded.file_url)}" target="_blank" rel="noreferrer">${svg('file')}Apri file</a>`
-                : '';
+            const file = documentFileLinks(uploaded);
             const dates = documentMeta(uploaded, status);
             const upload = ['missing', 'rejected', 'expired'].includes(status)
                 ? uploadForm(item.template.id, null, options.type, options.id, true)
@@ -713,9 +738,10 @@
                         const subNote = subUploaded?.admin_notes
                             ? `<p class="document-note">Note: ${escapeHtml(subUploaded.admin_notes)}</p>`
                             : '';
-                        const subFile = subUploaded?.file_url
-                            ? `<a class="document-file-link" href="${escapeHtml(subUploaded.file_url)}" target="_blank" rel="noreferrer">${svg('file')}Apri file</a>`
-                            : '';
+                        const subFile = documentFileLinks(subUploaded, {
+                            singleLabel: 'Apri file',
+                            primaryLabel: 'File principale',
+                        });
                         const subUpload = ['missing', 'rejected', 'expired'].includes(subStatus)
                             ? uploadForm(item.template.id, subitem.subtemplate.id, options.type, options.id, false)
                             : '';
@@ -890,7 +916,7 @@
                     const formData = new FormData(form);
                     await apiUpload('/documents', formData, (progress) => updateUploadProgress(form, progress));
                     documentCache.delete(options.endpoint || '');
-                    showAlert('Documento caricato.', 'success');
+                    showAlert(form.querySelector('[name="subtemplate_id"]') ? 'File del sottodocumento caricati.' : 'Documento caricato.', 'success');
                     await options.refresh();
                 } catch (error) {
                     showAlert(error.message);
@@ -951,6 +977,8 @@
     }
 
     function uploadForm(templateId, subtemplateId, type, id, allowExpiry = true, buttonLabel = 'Carica') {
+        const isMultiSubdocument = Boolean(subtemplateId);
+
         return `
             <form class="upload-form" data-upload-form>
                 <input type="hidden" name="template_id" value="${templateId}">
@@ -960,9 +988,9 @@
                 <div class="field file-field">
                     <label>File</label>
                     <label class="file-picker">
-                        <input class="file-input" type="file" name="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required data-file-input>
+                        <input class="file-input" type="file" name="${isMultiSubdocument ? 'files[]' : 'file'}" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" ${isMultiSubdocument ? 'multiple' : ''} required data-file-input>
                         <span class="file-picker-icon">${svg('upload')}</span>
-                        <span data-file-name>Trascina qui o seleziona PDF/DOC</span>
+                        <span data-file-name>${isMultiSubdocument ? 'Seleziona uno o piu PDF/DOC' : 'Trascina qui o seleziona PDF/DOC'}</span>
                     </label>
                 </div>
                 ${allowExpiry ? `
@@ -1126,15 +1154,20 @@
             });
 
             filePicker.addEventListener('drop', (event) => {
-                const file = event.dataTransfer?.files?.[0];
+                const files = event.dataTransfer?.files;
 
-                if (!file) {
+                if (!files?.length) {
                     return;
                 }
 
-                const transfer = new DataTransfer();
-                transfer.items.add(file);
-                input.files = transfer.files;
+                if (input.multiple) {
+                    input.files = files;
+                } else {
+                    const transfer = new DataTransfer();
+                    transfer.items.add(files[0]);
+                    input.files = transfer.files;
+                }
+
                 input.dispatchEvent(new Event('change', { bubbles: true }));
             });
         });

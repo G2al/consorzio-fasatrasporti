@@ -114,10 +114,16 @@ class DocumentApprovalResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereNull('parent_uploaded_document_id')
+                    ->orWhereHas('parentDocument', fn (Builder $query): Builder => $query->whereNull('subtemplate_id'));
+            })
             ->with([
                 'template.section',
                 'subtemplate',
                 'parentDocument',
+                'attachments',
                 'documentable' => fn (MorphTo $morphTo): MorphTo => $morphTo->morphWith([
                     Employee::class => ['user'],
                     Vehicle::class => ['user'],
@@ -385,6 +391,7 @@ class DocumentApprovalResource extends Resource
                                 'approved_at' => now(),
                                 'admin_notes' => null,
                             ]);
+                            static::syncAttachmentDecision($record, 'approved');
 
                             AuditLog::record('document.approved', $record->fresh(['template', 'subtemplate', 'documentable']), 'Documento approvato', [
                                 'template' => $record->template->name,
@@ -408,6 +415,7 @@ class DocumentApprovalResource extends Resource
                             'approved_at' => null,
                             'admin_notes' => $data['admin_notes'],
                         ]);
+                        static::syncAttachmentDecision($record, 'rejected', $data['admin_notes']);
 
                         $record->loadMissing(['template', 'subtemplate', 'documentable']);
                         $company = $record->companyUser();
@@ -522,6 +530,8 @@ class DocumentApprovalResource extends Resource
 
     protected static function filePreviewContent(UploadedDocument $record): HtmlString
     {
+        $record->loadMissing('attachments');
+
         $fileUrl = e($record->file_url);
         $fileName = e(basename($record->file_path));
         $extension = strtolower(pathinfo($record->file_path, PATHINFO_EXTENSION));
@@ -542,6 +552,19 @@ class DocumentApprovalResource extends Resource
                 </div>',
         };
 
+        $attachments = $record->attachments
+            ->map(function (UploadedDocument $attachment, int $index): string {
+                $name = e($attachment->integration_name ?: basename($attachment->file_path));
+                $url = e($attachment->file_url);
+
+                return '
+                    <a href="'.$url.'" target="_blank" rel="noreferrer" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:#fff;color:#0f172a;text-decoration:none;">
+                        <span style="font-size:13px;font-weight:600;">Allegato '.($index + 2).': '.$name.'</span>
+                        <span style="font-size:12px;color:#0f766e;font-weight:700;">Apri</span>
+                    </a>';
+            })
+            ->join('');
+
         return new HtmlString('
             <div style="display:grid;gap:14px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px solid rgba(148,163,184,.25);border-radius:12px;background:rgba(148,163,184,.08);">
@@ -553,8 +576,26 @@ class DocumentApprovalResource extends Resource
                         Apri in nuova scheda
                     </a>
                 </div>
+                '.($attachments !== '' ? '
+                    <div style="display:grid;gap:10px;">
+                        <p style="margin:0;font-size:12px;font-weight:700;color:#475569;">File aggiuntivi del sottodocumento</p>
+                        '.$attachments.'
+                    </div>' : '').'
                 '.$preview.'
             </div>
         ');
+    }
+
+    protected static function syncAttachmentDecision(UploadedDocument $record, string $status, ?string $notes = null): void
+    {
+        if (blank($record->subtemplate_id)) {
+            return;
+        }
+
+        $record->attachments()->update([
+            'status' => $status,
+            'approved_at' => $status === 'approved' ? now() : null,
+            'admin_notes' => $status === 'rejected' ? $notes : null,
+        ]);
     }
 }

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\DocumentCategory;
 use App\Models\DocumentExemption;
+use App\Models\DocumentSubtemplate;
 use App\Models\DocumentTemplate;
 use App\Models\UploadedDocument;
 use App\Models\User;
@@ -367,6 +368,90 @@ class CompanyApiTest extends TestCase
 
         $this->assertSame('Sicurezza', $document['template']['category']['name']);
         $this->assertCount(2, $document['uploaded_document']['integrations']);
+    }
+
+    public function test_company_can_upload_multiple_files_for_a_subdocument_with_single_status(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        $this->postJson('/api/register', [
+            'name' => 'Subdocumenti Demo SRL',
+            'responsible_name' => 'Mario Rossi',
+            'responsible_phone' => '+393201887833',
+            'vat_number' => '33344455566',
+            'email' => 'subdocumenti@example.com',
+            'password' => 'Password1',
+            'password_confirmation' => 'Password1',
+        ])->assertCreated();
+
+        $token = $this->approveAndLogin('subdocumenti@example.com');
+
+        $employeeId = $this->withToken($token)
+            ->postJson('/api/employees', [
+                'first_name' => 'Luca',
+                'last_name' => 'Bianchi',
+                'phone' => '+393201887833',
+            ])
+            ->assertCreated()
+            ->json('employee.id');
+
+        $template = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'dipendenti'))
+            ->firstOrFail();
+
+        $subtemplate = DocumentSubtemplate::query()->create([
+            'template_id' => $template->id,
+            'name' => 'Allegati formativi',
+            'description' => 'Carica piu attestati nello stesso sottodocumento.',
+            'sort_order' => 1,
+        ]);
+
+        $response = $this->withToken($token)
+            ->post('/api/documents', [
+                'template_id' => $template->id,
+                'subtemplate_id' => $subtemplate->id,
+                'documentable_type' => 'employee',
+                'documentable_id' => $employeeId,
+                'has_expiry' => '0',
+                'files' => [
+                    UploadedFile::fake()->create('attestato-a.pdf', 24, 'application/pdf'),
+                    UploadedFile::fake()->create('attestato-b.pdf', 24, 'application/pdf'),
+                    UploadedFile::fake()->create('attestato-c.pdf', 24, 'application/pdf'),
+                ],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('document.subtemplate_id', $subtemplate->id)
+            ->assertJsonPath('document.status', 'pending')
+            ->assertJsonCount(2, 'document.attachments');
+
+        $rootId = $response->json('document.id');
+
+        $this->assertDatabaseHas('uploaded_documents', [
+            'id' => $rootId,
+            'subtemplate_id' => $subtemplate->id,
+            'parent_uploaded_document_id' => null,
+            'status' => 'pending',
+        ]);
+
+        $this->assertSame(2, UploadedDocument::query()
+            ->where('parent_uploaded_document_id', $rootId)
+            ->where('subtemplate_id', $subtemplate->id)
+            ->count());
+
+        $documents = $this->withToken($token)
+            ->getJson("/api/employees/{$employeeId}/documents")
+            ->assertOk()
+            ->json('documents');
+
+        $document = collect($documents)
+            ->firstWhere('template.id', $template->id);
+        $subdocument = collect($document['subdocuments'])
+            ->firstWhere('subtemplate.id', $subtemplate->id);
+
+        $this->assertSame('pending', $subdocument['status']);
+        $this->assertSame($rootId, $subdocument['uploaded_document']['id']);
+        $this->assertCount(2, $subdocument['uploaded_document']['attachments']);
     }
 
 

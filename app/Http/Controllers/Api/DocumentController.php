@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
 class DocumentController extends Controller
@@ -53,7 +54,9 @@ class DocumentController extends Controller
             'expiry_date' => ['nullable', 'required_if:has_expiry,1,true,on', 'date'],
             'internal_expiry_name' => ['nullable', 'required_with:internal_expiry_date', 'string', 'max:255'],
             'internal_expiry_date' => ['nullable', 'required_with:internal_expiry_name', 'date'],
-            'file' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:'.config('services.documents.upload_max_kb')],
+            'file' => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:'.config('services.documents.upload_max_kb')],
+            'files' => ['nullable', 'array', 'min:1', 'max:10'],
+            'files.*' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:'.config('services.documents.upload_max_kb')],
         ]);
 
         $template = DocumentTemplate::query()
@@ -72,6 +75,7 @@ class DocumentController extends Controller
         abort_if($this->approvedExemptionExists($documentable, $template, $subtemplate), 422, 'Questo documento risulta esente e non puo essere caricato.');
 
         $hasExpiry = $subtemplate ? false : $request->boolean('has_expiry');
+        $files = $this->resolveUploadFiles($request, $subtemplate);
         $previousDocument = $this->currentDocument($documentable->documents()
             ->where('template_id', $template->id)
             ->where('subtemplate_id', $subtemplate?->id)
@@ -83,7 +87,7 @@ class DocumentController extends Controller
             $documentable,
             $template,
             $subtemplate,
-            $request->file('file'),
+            $files,
             $data['documentable_type'],
             $request->user()->id,
             $hasExpiry,
@@ -106,7 +110,7 @@ class DocumentController extends Controller
         );
 
         return response()->json([
-            'document' => $this->uploadedDocumentPayload($document->fresh(['template'])),
+            'document' => $this->uploadedDocumentPayload($document->fresh(['template', 'attachments'])),
         ], 201);
     }
 
@@ -229,9 +233,12 @@ class DocumentController extends Controller
         ], 201);
     }
 
-    private function storeDocument(Model $documentable, DocumentTemplate $template, ?DocumentSubtemplate $subtemplate, UploadedFile $file, string $type, int $companyId, bool $hasExpiry, ?string $expiryDate, ?string $internalExpiryName, ?string $internalExpiryDate): UploadedDocument
+    private function storeDocument(Model $documentable, DocumentTemplate $template, ?DocumentSubtemplate $subtemplate, Collection $files, string $type, int $companyId, bool $hasExpiry, ?string $expiryDate, ?string $internalExpiryName, ?string $internalExpiryDate): UploadedDocument
     {
-        $path = $file->store(
+        /** @var UploadedFile $firstFile */
+        $firstFile = $files->first();
+
+        $path = $firstFile->store(
             "uploaded-documents/{$companyId}/{$type}",
             'public',
         );
@@ -239,6 +246,7 @@ class DocumentController extends Controller
         $document = $documentable->documents()
             ->where('template_id', $template->id)
             ->where('subtemplate_id', $subtemplate?->id)
+            ->whereNull('parent_uploaded_document_id')
             ->where(function ($query): void {
                 $today = now()->toDateString();
 
@@ -271,13 +279,38 @@ class DocumentController extends Controller
             'admin_notes' => null,
         ];
 
-        if ($document instanceof UploadedDocument && $document->file_path) {
-            Storage::disk('public')->delete($document->file_path);
+        if ($document instanceof UploadedDocument) {
+            $document->attachments()->get()->each->delete();
+
+            if ($document->file_path) {
+                Storage::disk('public')->delete($document->file_path);
+            }
         }
 
-        return $document instanceof UploadedDocument
+        $rootDocument = $document instanceof UploadedDocument
             ? tap($document)->update($payload)
             : $documentable->documents()->create($payload);
+
+        if ($subtemplate && $files->count() > 1) {
+            $files
+                ->slice(1)
+                ->each(function (UploadedFile $file) use ($documentable, $template, $subtemplate, $type, $companyId, $rootDocument): void {
+                    $documentable->documents()->create([
+                        'template_id' => $template->id,
+                        'subtemplate_id' => $subtemplate->id,
+                        'parent_uploaded_document_id' => $rootDocument->id,
+                        'file_path' => $file->store(
+                            "uploaded-documents/{$companyId}/{$type}",
+                            'public',
+                        ),
+                        'status' => 'pending',
+                        'has_expiry' => false,
+                        'integration_name' => pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                    ]);
+                });
+        }
+
+        return $rootDocument;
     }
 
     private function documentsPayload(string $sectionSlug, Model $documentable): array
@@ -291,7 +324,7 @@ class DocumentController extends Controller
 
         $uploadedDocuments = $documentable->documents()
             ->whereNull('parent_uploaded_document_id')
-            ->with(['template', 'subtemplate', 'integrations'])
+            ->with(['template', 'subtemplate', 'integrations', 'attachments'])
             ->latest('updated_at')
             ->get()
             ->groupBy(fn (UploadedDocument $document): string => $this->documentKey($document->template_id, $document->subtemplate_id));
@@ -400,6 +433,7 @@ class DocumentController extends Controller
             'subtemplate_id' => $document->subtemplate_id,
             'file_path' => $document->file_path,
             'file_url' => $document->file_url,
+            'file_name' => filled($document->file_path) ? basename($document->file_path) : null,
             'status' => $document->status,
             'effective_status' => $document->effectiveStatus(),
             'is_expired' => $document->isExpired(),
@@ -413,6 +447,10 @@ class DocumentController extends Controller
             'integration_name' => $document->integration_name,
             'integration_notes' => $document->integration_notes,
             'is_integration' => $document->isIntegration(),
+            'is_attachment' => $document->isAttachment(),
+            'attachments' => $document->relationLoaded('attachments')
+                ? $document->attachments->map(fn (UploadedDocument $attachment): array => $this->uploadedDocumentPayload($attachment))->all()
+                : [],
             'integrations' => $document->relationLoaded('integrations')
                 ? $document->integrations->map(fn (UploadedDocument $integration): array => $this->uploadedDocumentPayload($integration))->all()
                 : [],
@@ -460,6 +498,36 @@ class DocumentController extends Controller
     private function documentKey(int $templateId, ?int $subtemplateId = null): string
     {
         return $templateId.':'.($subtemplateId ?: 'parent');
+    }
+
+    private function resolveUploadFiles(Request $request, ?DocumentSubtemplate $subtemplate): Collection
+    {
+        $files = collect($request->file('files', []))
+            ->filter(fn ($file): bool => $file instanceof UploadedFile)
+            ->values();
+
+        if ($subtemplate) {
+            if ($files->isEmpty() && $request->file('file') instanceof UploadedFile) {
+                $files = collect([$request->file('file')]);
+            }
+
+            abort_if($files->isEmpty(), 422, 'Carica almeno un file per il sottodocumento.');
+
+            return $files;
+        }
+
+        if ($files->count() > 1) {
+            abort(422, 'Per questo documento puoi caricare un solo file alla volta.');
+        }
+
+        if ($files->isNotEmpty()) {
+            return collect([$files->first()]);
+        }
+
+        $file = $request->file('file');
+        abort_unless($file instanceof UploadedFile, 422, 'Carica un file valido.');
+
+        return collect([$file]);
     }
 
     private function currentDocument(?\Illuminate\Support\Collection $documents): ?UploadedDocument

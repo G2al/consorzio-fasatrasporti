@@ -56,9 +56,24 @@ class UploadedDocument extends Model
         return $this->belongsTo(UploadedDocument::class, 'parent_uploaded_document_id');
     }
 
-    public function integrations(): HasMany
+    public function childDocuments(): HasMany
     {
         return $this->hasMany(UploadedDocument::class, 'parent_uploaded_document_id')
+            ->latest('created_at');
+    }
+
+    public function integrations(): HasMany
+    {
+        return $this->childDocuments()
+            ->whereNull('subtemplate_id')
+            ->whereNotNull('integration_name')
+            ->latest('created_at');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->childDocuments()
+            ->whereNotNull('subtemplate_id')
             ->latest('created_at');
     }
 
@@ -81,7 +96,9 @@ class UploadedDocument extends Model
 
     public function getFileUrlAttribute(): string
     {
-        return asset('storage/'.$this->file_path);
+        return filled($this->file_path)
+            ? asset('storage/'.$this->file_path)
+            : '';
     }
 
     public function isExpired(): bool
@@ -103,7 +120,12 @@ class UploadedDocument extends Model
 
     public function isIntegration(): bool
     {
-        return filled($this->parent_uploaded_document_id);
+        return filled($this->parent_uploaded_document_id) && blank($this->subtemplate_id);
+    }
+
+    public function isAttachment(): bool
+    {
+        return filled($this->parent_uploaded_document_id) && filled($this->subtemplate_id);
     }
 
     protected static function booted(): void
@@ -135,6 +157,8 @@ class UploadedDocument extends Model
         });
 
         static::deleting(function (UploadedDocument $document): void {
+            $document->childDocuments()->get()->each->delete();
+
             if ($document->file_path) {
                 Storage::disk('public')->delete($document->file_path);
             }
