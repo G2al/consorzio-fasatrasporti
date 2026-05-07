@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\DocumentTemplate;
 use App\Models\Employee;
+use App\Models\EntityDeletionRequest;
 use App\Models\UploadedDocument;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ class EmployeeController extends Controller
 
         $employees = Employee::query()
             ->where('user_id', $request->user()->id)
+            ->with('latestDeletionRequest')
             ->withCount($this->documentStatusCounts())
             ->orderBy('last_name')
             ->orderBy('first_name')
@@ -42,7 +44,7 @@ class EmployeeController extends Controller
         AuditLog::record('employee.created', $employee, 'Dipendente creato', actor: $request->user());
 
         return response()->json([
-            'employee' => $this->payload($employee->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
+            'employee' => $this->payload($employee->load(['latestDeletionRequest'])->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
         ], 201);
     }
 
@@ -60,7 +62,7 @@ class EmployeeController extends Controller
         AuditLog::record('employee.updated', $employee, 'Dipendente aggiornato', actor: $request->user());
 
         return response()->json([
-            'employee' => $this->payload($employee->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
+            'employee' => $this->payload($employee->load(['latestDeletionRequest'])->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
         ]);
     }
 
@@ -101,6 +103,28 @@ class EmployeeController extends Controller
                 ->whereNull('subtemplate_id')
                 ->whereHas('template.section', fn ($query) => $query->where('slug', 'dipendenti'))
                 ->count(), 0),
+            'deletion_request' => $this->deletionRequestPayload($employee->latestDeletionRequest),
+        ];
+    }
+
+    private function deletionRequestPayload(?EntityDeletionRequest $request): ?array
+    {
+        if (! $request) {
+            return null;
+        }
+
+        return [
+            'id' => $request->id,
+            'type' => $request->typeKey(),
+            'type_label' => $request->typeLabel(),
+            'status' => $request->status,
+            'snapshot_label' => $request->snapshot_label,
+            'snapshot_secondary' => $request->snapshot_secondary,
+            'requested_reason' => $request->requested_reason,
+            'admin_notes' => $request->admin_notes,
+            'created_at' => $request->created_at?->toIso8601String(),
+            'reviewed_at' => $request->reviewed_at?->toIso8601String(),
+            'target' => $request->targetPath(),
         ];
     }
 

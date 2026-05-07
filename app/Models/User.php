@@ -76,6 +76,11 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(CompanyNotificationDismissal::class);
     }
 
+    public function deletionRequests(): HasMany
+    {
+        return $this->hasMany(EntityDeletionRequest::class, 'company_id');
+    }
+
     public function uploadedDocuments(): MorphMany
     {
         return $this->documents();
@@ -102,6 +107,7 @@ class User extends Authenticatable implements FilamentUser
         static::deleting(function (User $user): void {
             $user->documents()->get()->each->delete();
             $user->documentExemptions()->delete();
+            $user->deletionRequests()->delete();
             $user->employees()->get()->each->delete();
             $user->vehicles()->get()->each->delete();
         });

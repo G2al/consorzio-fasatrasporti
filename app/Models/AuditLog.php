@@ -65,6 +65,9 @@ class AuditLog extends Model
             'document_exemption.approved' => 'Esenzione approvata',
             'document_exemption.rejected' => 'Esenzione rifiutata',
             'document_exemption.restored' => 'Esenzione ripristinata',
+            'entity_deletion_request.requested' => 'Eliminazione richiesta',
+            'entity_deletion_request.approved' => 'Eliminazione approvata',
+            'entity_deletion_request.rejected' => 'Eliminazione respinta',
             default => str($action)->replace(['.', '_'], ' ')->headline()->toString(),
         };
     }
@@ -99,6 +102,10 @@ class AuditLog extends Model
 
         if ($auditable instanceof User) {
             return $auditable->name;
+        }
+
+        if ($auditable instanceof EntityDeletionRequest) {
+            return $auditable->reviewLabel();
         }
 
         return $this->metadataSubject();
@@ -144,6 +151,14 @@ class AuditLog extends Model
             $parts[] = 'Note: '.$metadata['notes'];
         }
 
+        if (! empty($metadata['requested_reason'])) {
+            $parts[] = 'Motivo richiesta: '.$metadata['requested_reason'];
+        }
+
+        if (! empty($metadata['details'])) {
+            $parts[] = 'Dettagli: '.$metadata['details'];
+        }
+
         if (! empty($metadata['name'])) {
             $parts[] = 'Nome: '.$metadata['name'];
         }
@@ -181,6 +196,7 @@ class AuditLog extends Model
         if (! $company) {
             $company = match (true) {
                 $auditable instanceof UploadedDocument => $auditable->companyUser(),
+                $auditable instanceof EntityDeletionRequest => $auditable->company,
                 $auditable instanceof Employee,
                 $auditable instanceof Vehicle => $auditable->user,
                 $auditable instanceof User && $auditable->role === 'company' => $auditable,

@@ -7,6 +7,7 @@ use App\Models\DocumentCategory;
 use App\Models\DocumentExemption;
 use App\Models\DocumentSubtemplate;
 use App\Models\DocumentTemplate;
+use App\Models\EntityDeletionRequest;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -493,6 +494,95 @@ class CompanyApiTest extends TestCase
         $this->assertSame(2, AuditLog::query()
             ->whereIn('action', ['company.profile_updated', 'company.password_updated'])
             ->count());
+    }
+
+    public function test_company_can_request_employee_and_vehicle_deletion_with_notifications(): void
+    {
+        $this->seed();
+
+        $this->postJson('/api/register', [
+            'name' => 'Eliminazioni SRL',
+            'responsible_name' => 'Lara Neri',
+            'vat_number' => '77788899900',
+            'email' => 'eliminazioni@example.com',
+            'password' => 'Password1',
+            'password_confirmation' => 'Password1',
+        ])->assertCreated();
+
+        $token = $this->approveAndLogin('eliminazioni@example.com');
+
+        $employeeId = $this->withToken($token)
+            ->postJson('/api/employees', [
+                'first_name' => 'Marco',
+                'last_name' => 'Test',
+                'phone' => '+393201234567',
+            ])
+            ->assertCreated()
+            ->json('employee.id');
+
+        $vehicleId = $this->withToken($token)
+            ->postJson('/api/vehicles', [
+                'plate' => 'AB123CD',
+                'capacity' => 7,
+            ])
+            ->assertCreated()
+            ->json('vehicle.id');
+
+        $employeeRequestId = $this->withToken($token)
+            ->postJson("/api/employees/{$employeeId}/deletion-requests", [
+                'requested_reason' => 'Dipendente non piu attivo.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('request.status', 'pending')
+            ->assertJsonPath('request.type', 'employee')
+            ->json('request.id');
+
+        $this->withToken($token)
+            ->getJson('/api/employees')
+            ->assertOk()
+            ->assertJsonPath('employees.0.deletion_request.id', $employeeRequestId)
+            ->assertJsonPath('employees.0.deletion_request.status', 'pending');
+
+        $vehicleRequestId = $this->withToken($token)
+            ->postJson("/api/vehicles/{$vehicleId}/deletion-requests", [
+                'requested_reason' => 'Veicolo sostituito.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('request.status', 'pending')
+            ->assertJsonPath('request.type', 'vehicle')
+            ->json('request.id');
+
+        $this->withToken($token)
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->assertJsonPath('notifications.0.type', 'entity_deletion_pending')
+            ->assertJsonPath('unread_count', 2);
+
+        $employeeRequest = EntityDeletionRequest::query()->findOrFail($employeeRequestId);
+        $employeeRequest->approve();
+
+        $vehicleRequest = EntityDeletionRequest::query()->findOrFail($vehicleRequestId);
+        $vehicleRequest->reject('Mantieni questo veicolo in archivio.');
+
+        $this->withToken($token)
+            ->getJson('/api/vehicles')
+            ->assertOk()
+            ->assertJsonPath('vehicles.0.deletion_request.status', 'rejected');
+
+        $notifications = $this->withToken($token)
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->json('notifications');
+
+        $types = collect($notifications)->pluck('type')->all();
+
+        $this->assertContains('entity_deletion_approved', $types);
+        $this->assertContains('entity_deletion_rejected', $types);
+        $this->assertDatabaseMissing('employees', ['id' => $employeeId]);
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicleId]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'entity_deletion_request.requested']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'entity_deletion_request.approved']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'entity_deletion_request.rejected']);
     }
 
     public function test_company_registration_sends_telegram_notification_when_enabled(): void

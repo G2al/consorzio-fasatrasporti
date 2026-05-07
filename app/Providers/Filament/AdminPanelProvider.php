@@ -43,6 +43,8 @@ class AdminPanelProvider extends PanelProvider
                     ->collapsible(),
                 NavigationGroup::make('Documenti')
                     ->collapsible(),
+                NavigationGroup::make('Richieste')
+                    ->collapsible(),
                 NavigationGroup::make('Impostazioni')
                     ->collapsed(),
             ])
@@ -51,10 +53,18 @@ class AdminPanelProvider extends PanelProvider
                 fn (): HtmlString => new HtmlString(<<<'HTML'
                     <script>
                         (() => {
-                            const endpoint = '/admin/document-approvals/pending-count';
-                            const targetPath = '/admin/document-approvals';
+                            const badgeConfigs = [
+                                {
+                                    endpoint: '/admin/document-approvals/pending-count',
+                                    targetPath: '/admin/document-approvals',
+                                },
+                                {
+                                    endpoint: '/admin/deletion-requests/pending-count',
+                                    targetPath: '/admin/deletion-requests',
+                                },
+                            ];
 
-                            function approvalLinks() {
+                            function navLinks(targetPath) {
                                 return Array.from(document.querySelectorAll('a.fi-sidebar-item-btn[href]'))
                                     .filter((link) => {
                                         try {
@@ -65,7 +75,7 @@ class AdminPanelProvider extends PanelProvider
                                     });
                             }
 
-                            function ensureBadge(link) {
+                            function ensureBadge(link, badgeKey) {
                                 let container = link.querySelector('[data-live-approval-badge]');
 
                                 if (container) {
@@ -81,6 +91,7 @@ class AdminPanelProvider extends PanelProvider
 
                                 container = document.createElement('span');
                                 container.dataset.liveApprovalBadge = 'true';
+                                container.dataset.liveBadgeKey = badgeKey;
                                 container.className = 'fi-sidebar-item-badge-ctn';
                                 container.innerHTML = '<span class="fi-badge fi-color-danger">0</span>';
                                 link.appendChild(container);
@@ -88,9 +99,11 @@ class AdminPanelProvider extends PanelProvider
                                 return container;
                             }
 
-                            function setBadge(count) {
-                                approvalLinks().forEach((link) => {
-                                    const container = ensureBadge(link);
+                            function setBadge(config, count) {
+                                const badgeKey = config.targetPath.replace(/[^a-z0-9]+/gi, '-');
+
+                                navLinks(config.targetPath).forEach((link) => {
+                                    const container = ensureBadge(link, badgeKey);
                                     const badge = container.querySelector('.fi-badge') || container;
 
                                     container.hidden = count <= 0;
@@ -98,9 +111,9 @@ class AdminPanelProvider extends PanelProvider
                                 });
                             }
 
-                            async function refreshBadge() {
+                            async function refreshBadge(config) {
                                 try {
-                                    const response = await fetch(endpoint, {
+                                    const response = await fetch(config.endpoint, {
                                         headers: { Accept: 'application/json' },
                                         credentials: 'same-origin',
                                     });
@@ -110,15 +123,19 @@ class AdminPanelProvider extends PanelProvider
                                     }
 
                                     const data = await response.json();
-                                    setBadge(Number(data.count || 0));
+                                    setBadge(config, Number(data.count || 0));
                                 } catch (error) {
                                     // Silenzioso: il badge non deve disturbare il lavoro nel pannello.
                                 }
                             }
 
-                            document.addEventListener('DOMContentLoaded', refreshBadge);
-                            document.addEventListener('livewire:navigated', refreshBadge);
-                            window.setInterval(refreshBadge, 10000);
+                            function refreshAllBadges() {
+                                badgeConfigs.forEach((config) => refreshBadge(config));
+                            }
+
+                            document.addEventListener('DOMContentLoaded', refreshAllBadges);
+                            document.addEventListener('livewire:navigated', refreshAllBadges);
+                            window.setInterval(refreshAllBadges, 10000);
                         })();
                     </script>
                 HTML),

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Employee extends Model
 {
@@ -31,6 +32,16 @@ class Employee extends Model
     public function documentExemptions(): MorphMany
     {
         return $this->morphMany(DocumentExemption::class, 'exemptable');
+    }
+
+    public function deletionRequests(): MorphMany
+    {
+        return $this->morphMany(EntityDeletionRequest::class, 'deletable');
+    }
+
+    public function latestDeletionRequest(): MorphOne
+    {
+        return $this->morphOne(EntityDeletionRequest::class, 'deletable')->latestOfMany();
     }
 
     public function uploadedDocuments(): MorphMany

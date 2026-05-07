@@ -1928,6 +1928,11 @@ select {
     display: block;
 }
 
+.modal-stack {
+    display: grid;
+    gap: 14px;
+}
+
 .modal-edit-card {
     display: grid;
     gap: 12px;
@@ -1949,6 +1954,47 @@ select {
     grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
     gap: 12px;
     align-items: end;
+}
+
+.deletion-request-card {
+    border-color: rgba(180, 35, 24, 0.16);
+}
+
+.deletion-request-summary {
+    display: grid;
+    gap: 8px;
+}
+
+.deletion-request-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.entity-inline-note {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.entity-inline-note.warning {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+}
+
+.entity-inline-note.success {
+    background: rgba(35, 122, 75, 0.12);
+    color: var(--success);
+}
+
+.entity-inline-note.danger {
+    background: rgba(180, 35, 24, 0.12);
+    color: var(--danger);
 }
 
 .close-btn {

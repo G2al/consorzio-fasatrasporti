@@ -71,6 +71,19 @@ class AdminPanelTest extends TestCase
             ->assertOk();
     }
 
+    public function test_admin_can_open_entity_deletion_requests_resource(): void
+    {
+        $this->seed();
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $this->actingAs($admin, 'admin')
+            ->get('/admin/entity-deletion-requests')
+            ->assertOk();
+    }
+
     public function test_admin_can_open_audit_log_resource(): void
     {
         $this->seed();
@@ -144,6 +157,10 @@ class AdminPanelTest extends TestCase
 
         $this->actingAs($reviewer, 'admin')
             ->get('/admin/document-exemptions')
+            ->assertOk();
+
+        $this->actingAs($reviewer, 'admin')
+            ->get('/admin/entity-deletion-requests')
             ->assertOk();
 
         $this->actingAs($reviewer, 'admin')

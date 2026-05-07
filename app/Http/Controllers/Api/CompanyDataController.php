@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CompanyNotificationDismissal;
 use App\Models\DocumentExemption;
 use App\Models\Employee;
+use App\Models\EntityDeletionRequest;
 use App\Models\Section;
 use App\Models\UploadedDocument;
 use App\Models\User;
@@ -247,10 +248,17 @@ class CompanyDataController extends Controller
             ->take(8)
             ->map(fn (DocumentExemption $exemption): array => $this->exemptionNotificationPayload($exemption));
 
+        $deletionRequests = $company->deletionRequests()
+            ->latest('updated_at')
+            ->take(8)
+            ->get()
+            ->map(fn (EntityDeletionRequest $request): array => $this->deletionRequestNotificationPayload($request));
+
         return $rejected
             ->concat($expiring)
             ->concat($approved)
             ->concat($exemptionNotifications)
+            ->concat($deletionRequests)
             ->sortByDesc(fn (array $item): string => sprintf('%02d-%s', $item['priority'], $item['sort_date'] ?? ''))
             ->take(12)
             ->values();
@@ -453,6 +461,49 @@ class CompanyDataController extends Controller
             'body' => $body,
             'date' => $date,
             'target' => $this->exemptionNotificationTarget($exemption),
+            'is_urgent' => $isUrgent,
+            'priority' => $priority,
+            'sort_date' => $date,
+        ];
+    }
+
+    private function deletionRequestNotificationPayload(EntityDeletionRequest $request): array
+    {
+        [$type, $title, $body, $priority, $isUrgent] = match ($request->status) {
+            'approved' => [
+                'entity_deletion_approved',
+                'Eliminazione approvata',
+                $request->typeLabel().' rimosso correttamente.',
+                2,
+                false,
+            ],
+            'rejected' => [
+                'entity_deletion_rejected',
+                'Eliminazione respinta',
+                $request->admin_notes ?: 'La richiesta non e stata accettata.',
+                3,
+                true,
+            ],
+            default => [
+                'entity_deletion_pending',
+                'Eliminazione in attesa',
+                'La richiesta e in attesa di verifica da parte dell admin.',
+                1,
+                false,
+            ],
+        };
+
+        $date = ($request->reviewed_at ?: $request->updated_at)?->toIso8601String();
+        $versionKey = substr(sha1($date.'|'.$body.'|'.$request->status), 0, 12);
+
+        return [
+            'id' => $type.'-'.$request->id.'-'.$versionKey,
+            'type' => $type,
+            'title' => $title,
+            'subtitle' => $request->typeLabel().' - '.$request->snapshot_label,
+            'body' => $body,
+            'date' => $date,
+            'target' => $request->targetPath(),
             'is_urgent' => $isUrgent,
             'priority' => $priority,
             'sort_date' => $date,

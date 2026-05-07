@@ -19,6 +19,9 @@
         rejected: 'Respinto',
         expired: 'Scaduto',
         exemption_pending: 'Esenzione in attesa',
+        entity_deletion_pending: 'Eliminazione in attesa',
+        entity_deletion_approved: 'Eliminazione approvata',
+        entity_deletion_rejected: 'Eliminazione respinta',
     };
 
     function qs(selector, scope = document) {
@@ -418,6 +421,28 @@
         }
 
         return 'pending';
+    }
+
+    function entityDeletionMeta(entity) {
+        const request = entity?.deletion_request;
+
+        if (!request) {
+            return null;
+        }
+
+        return {
+            request,
+            label: request.status === 'pending'
+                ? 'Eliminazione richiesta'
+                : request.status === 'approved'
+                    ? 'Eliminazione approvata'
+                    : 'Eliminazione respinta',
+            tone: request.status === 'approved'
+                ? 'success'
+                : request.status === 'rejected'
+                    ? 'danger'
+                    : 'warning',
+        };
     }
 
     function formatDate(value, withTime = false) {
@@ -843,8 +868,6 @@
                             ${expiredNote}
                             ${exemptionNote}
                             ${pendingExemption}
-                            ${subdocumentsHtml}
-                            ${integrationsHtml}
                             </div>
                             ${hasAction ? `
                                 <div class="document-actions">
@@ -854,6 +877,8 @@
                                     ${integration}
                                 </div>
                             ` : ''}
+                            ${subdocumentsHtml}
+                            ${integrationsHtml}
                         </div>
                     </div>
                 </article>
@@ -1707,15 +1732,15 @@
     }
 
     function notificationIcon(type) {
-        if (['rejected', 'expired', 'exemption_rejected'].includes(type)) {
+        if (['rejected', 'expired', 'exemption_rejected', 'entity_deletion_rejected'].includes(type)) {
             return '!';
         }
 
-        if (['approved', 'exemption_approved'].includes(type)) {
+        if (['approved', 'exemption_approved', 'entity_deletion_approved'].includes(type)) {
             return 'OK';
         }
 
-        if (type === 'exemption_pending') {
+        if (['exemption_pending', 'entity_deletion_pending'].includes(type)) {
             return 'EX';
         }
 
@@ -1893,6 +1918,7 @@
 
         container.innerHTML = employees.map((employee) => {
             const progress = documentsProgress(employee);
+            const deletion = entityDeletionMeta(employee);
 
             return `
             <button class="entity-card rich" type="button" data-open-documents="employee" data-id="${employee.id}" data-title="${escapeHtml(`${employee.first_name} ${employee.last_name}`)}" data-subtitle="${escapeHtml(progress.label)}">
@@ -1900,6 +1926,7 @@
                 <span class="entity-main">
                     <span class="entity-title">${escapeHtml(employee.first_name)} ${escapeHtml(employee.last_name)}</span>
                     <span class="meta">${escapeHtml(progress.label)}</span>
+                    ${deletion ? `<span class="entity-inline-note ${escapeHtml(deletion.tone)}">${escapeHtml(deletion.label)}</span>` : ''}
                     <span class="progress-line"><span style="width: ${progress.percent}%"></span></span>
                 </span>
                 ${statusPill(progressStatus(employee))}
@@ -1953,6 +1980,7 @@
 
         container.innerHTML = vehicles.map((vehicle) => {
             const progress = documentsProgress(vehicle);
+            const deletion = entityDeletionMeta(vehicle);
 
             return `
             <button class="entity-card rich" type="button" data-open-documents="vehicle" data-id="${vehicle.id}" data-title="${escapeHtml(vehicle.plate)}" data-subtitle="${escapeHtml(progress.label)}">
@@ -1960,6 +1988,7 @@
                 <span class="entity-main">
                     <span class="entity-title">${escapeHtml(vehicle.plate)}</span>
                     <span class="meta">${escapeHtml(vehicle.capacity)} posti &middot; ${escapeHtml(progress.label)}</span>
+                    ${deletion ? `<span class="entity-inline-note ${escapeHtml(deletion.tone)}">${escapeHtml(deletion.label)}</span>` : ''}
                     <span class="progress-line"><span style="width: ${progress.percent}%"></span></span>
                 </span>
                 ${statusPill(progressStatus(vehicle))}
@@ -2131,6 +2160,52 @@
         `;
     }
 
+    function deletionRequestStatusBadge(status) {
+        return statusPill(status === 'pending'
+            ? 'entity_deletion_pending'
+            : status === 'approved'
+                ? 'entity_deletion_approved'
+                : 'entity_deletion_rejected');
+    }
+
+    function entityDeletionRequestCard(options) {
+        const request = options.entity?.deletion_request || null;
+        const entityLabel = options.type === 'employee' ? 'dipendente' : 'veicolo';
+        const canSubmit = !request || request.status === 'rejected';
+
+        return `
+            <div class="modal-edit-card deletion-request-card">
+                <div class="modal-edit-title">
+                    <span class="entity-icon small">${svg('x')}</span>
+                    <strong>Richiesta eliminazione</strong>
+                </div>
+                <p class="meta">Invia una richiesta per eliminare questo ${escapeHtml(entityLabel)}. La richiesta verra revisionata in Filament.</p>
+                ${request ? `
+                    <div class="deletion-request-summary">
+                        <div class="deletion-request-status">
+                            ${deletionRequestStatusBadge(request.status)}
+                            <span class="meta">${escapeHtml(formatDate(request.reviewed_at || request.created_at, true) || '')}</span>
+                        </div>
+                        ${request.requested_reason ? `<p class="document-note">Note societa: ${escapeHtml(request.requested_reason)}</p>` : ''}
+                        ${request.admin_notes ? `<p class="document-note danger">Note admin: ${escapeHtml(request.admin_notes)}</p>` : ''}
+                    </div>
+                ` : ''}
+                ${canSubmit ? `
+                    <form data-entity-deletion-form data-type="${escapeHtml(options.type)}" data-id="${escapeHtml(options.id)}">
+                        <div class="field">
+                            <label for="deletion_request_reason_${escapeHtml(options.type)}_${escapeHtml(options.id)}">Note richiesta</label>
+                            <textarea class="input" id="deletion_request_reason_${escapeHtml(options.type)}_${escapeHtml(options.id)}" name="requested_reason" rows="3" placeholder="Facoltativo"></textarea>
+                        </div>
+                        <button class="btn danger" type="submit" data-loading-text="Invio...">
+                            <span class="btn-content">Richiedi eliminazione</span>
+                            <span class="btn-loader" aria-hidden="true"></span>
+                        </button>
+                    </form>
+                ` : ''}
+            </div>
+        `;
+    }
+
     function bindEntityEditForm(options, refreshModal) {
         const form = qs('[data-entity-edit-form]');
 
@@ -2178,6 +2253,61 @@
         });
     }
 
+    function bindEntityDeletionForm(options, refreshModal) {
+        const form = qs('[data-entity-deletion-form]');
+
+        if (!form) {
+            return;
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            hideAlert();
+
+            const button = qs('button[type="submit"]', form);
+            const endpoint = options.type === 'employee'
+                ? `/employees/${options.id}/deletion-requests`
+                : `/vehicles/${options.id}/deletion-requests`;
+
+            setButtonLoading(button, true, 'Invio...');
+
+            try {
+                const data = await api(endpoint, {
+                    method: 'POST',
+                    body: Object.fromEntries(new FormData(form)),
+                });
+
+                const collectionKey = options.type === 'employee' ? 'employees' : 'vehicles';
+                appState[collectionKey] = appState[collectionKey].map((entity) => {
+                    if (String(entity.id) !== String(options.id)) {
+                        return entity;
+                    }
+
+                    return {
+                        ...entity,
+                        deletion_request: data.request,
+                    };
+                });
+
+                options.entity = appState[collectionKey].find((entity) => String(entity.id) === String(options.id)) || options.entity;
+
+                if (options.type === 'employee') {
+                    renderEmployees();
+                } else {
+                    renderVehicles();
+                }
+
+                await refreshNotifications({ silent: true });
+                showToast('Richiesta di eliminazione inviata.', 'success');
+                await refreshModal();
+            } catch (error) {
+                showAlert(error.message);
+            } finally {
+                setButtonLoading(button, false);
+            }
+        });
+    }
+
     async function openDocumentsModal(options) {
         const backdrop = qs('[data-modal]');
         const title = qs('[data-modal-title]');
@@ -2196,13 +2326,29 @@
                     ${documentCache.has(options.endpoint) ? '' : '<div class="spinner">Caricamento...</div>'}
                 </div>
             </div>
-            <div class="modal-panel" data-modal-panel="details">
-                ${entityEditForm(options)}
-            </div>
+            <div class="modal-panel" data-modal-panel="details"></div>
         `;
         backdrop.classList.add('is-open');
         document.body.classList.add('has-open-modal');
         bindModalTabs(body);
+
+        const renderDetailsPanel = () => {
+            const panel = qs('[data-modal-panel="details"]', body);
+
+            if (!panel) {
+                return;
+            }
+
+            panel.innerHTML = `
+                <div class="modal-stack">
+                    ${entityEditForm(options)}
+                    ${entityDeletionRequestCard(options)}
+                </div>
+            `;
+
+            bindEntityEditForm(options, refresh);
+            bindEntityDeletionForm(options, refresh);
+        };
 
         const refresh = async () => {
             const data = await api(options.endpoint);
@@ -2213,6 +2359,7 @@
                 options.entity = updatedEntity;
                 options.subtitle = documentsProgress(updatedEntity).label;
                 subtitle.textContent = options.subtitle;
+                renderDetailsPanel();
             }
 
             renderDocuments(qs('[data-modal-documents]', body), data.documents, {
@@ -2224,7 +2371,7 @@
             });
         };
 
-        bindEntityEditForm(options, refresh);
+        renderDetailsPanel();
 
         try {
             if (documentCache.has(options.endpoint)) {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\DocumentTemplate;
+use App\Models\EntityDeletionRequest;
 use App\Models\UploadedDocument;
 use App\Models\Vehicle;
 use App\Models\VehicleCapacity;
@@ -21,6 +22,7 @@ class VehicleController extends Controller
 
         $vehicles = Vehicle::query()
             ->where('user_id', $request->user()->id)
+            ->with('latestDeletionRequest')
             ->withCount($this->documentStatusCounts())
             ->orderBy('plate')
             ->get()
@@ -42,7 +44,7 @@ class VehicleController extends Controller
         AuditLog::record('vehicle.created', $vehicle, 'Veicolo creato', actor: $request->user());
 
         return response()->json([
-            'vehicle' => $this->payload($vehicle->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
+            'vehicle' => $this->payload($vehicle->load(['latestDeletionRequest'])->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
         ], 201);
     }
 
@@ -59,7 +61,7 @@ class VehicleController extends Controller
         AuditLog::record('vehicle.updated', $vehicle, 'Veicolo aggiornato', actor: $request->user());
 
         return response()->json([
-            'vehicle' => $this->payload($vehicle->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
+            'vehicle' => $this->payload($vehicle->load(['latestDeletionRequest'])->loadCount($this->documentStatusCounts()), $this->requiredDocumentsCount()),
         ]);
     }
 
@@ -100,6 +102,28 @@ class VehicleController extends Controller
                 ->whereNull('subtemplate_id')
                 ->whereHas('template.section', fn ($query) => $query->where('slug', 'veicoli'))
                 ->count(), 0),
+            'deletion_request' => $this->deletionRequestPayload($vehicle->latestDeletionRequest),
+        ];
+    }
+
+    private function deletionRequestPayload(?EntityDeletionRequest $request): ?array
+    {
+        if (! $request) {
+            return null;
+        }
+
+        return [
+            'id' => $request->id,
+            'type' => $request->typeKey(),
+            'type_label' => $request->typeLabel(),
+            'status' => $request->status,
+            'snapshot_label' => $request->snapshot_label,
+            'snapshot_secondary' => $request->snapshot_secondary,
+            'requested_reason' => $request->requested_reason,
+            'admin_notes' => $request->admin_notes,
+            'created_at' => $request->created_at?->toIso8601String(),
+            'reviewed_at' => $request->reviewed_at?->toIso8601String(),
+            'target' => $request->targetPath(),
         ];
     }
 

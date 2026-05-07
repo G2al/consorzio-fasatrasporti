@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompanyDataController;
 use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\EntityDeletionRequestController;
 use App\Http\Controllers\Api\VehicleController;
 use Illuminate\Support\Facades\Route;
 
@@ -28,12 +29,14 @@ Route::middleware('auth:company_api')->group(function () {
     Route::post('/employees', [EmployeeController::class, 'store']);
     Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy']);
+    Route::post('/employees/{employee}/deletion-requests', [EntityDeletionRequestController::class, 'storeEmployee']);
     Route::get('/employees/{employee}/documents', [DocumentController::class, 'employeeDocuments']);
 
     Route::get('/vehicles', [VehicleController::class, 'index']);
     Route::post('/vehicles', [VehicleController::class, 'store']);
     Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update']);
     Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy']);
+    Route::post('/vehicles/{vehicle}/deletion-requests', [EntityDeletionRequestController::class, 'storeVehicle']);
     Route::get('/vehicles/{vehicle}/documents', [DocumentController::class, 'vehicleDocuments']);
 
     Route::post('/documents', [DocumentController::class, 'upload'])->middleware('throttle:30,1');
