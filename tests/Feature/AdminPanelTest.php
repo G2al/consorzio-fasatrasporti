@@ -379,4 +379,28 @@ class AdminPanelTest extends TestCase
             ->assertSee('Scarica')
             ->assertSee('Revisiona');
     }
+
+    public function test_admin_can_download_filtered_company_overview_pdf(): void
+    {
+        $this->seed();
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $company = User::query()->create([
+            'name' => 'Filtro PDF SRL',
+            'email' => 'filtro-pdf@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.downloads.companies.pdf', [$company, 'all']).'?filter=missing')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf')
+            ->assertHeader('content-disposition', 'attachment; filename="riepilogo-documenti-mancanti-tutti-filtro-pdf-srl.pdf"');
+    }
 }

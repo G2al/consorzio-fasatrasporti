@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Support\CompanyDocumentOverviewReport;
 use App\Support\SimplePdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Response;
@@ -58,12 +59,9 @@ class DocumentDownloadController extends Controller
     {
         abort_unless($company->role === 'company', Response::HTTP_NOT_FOUND);
         abort_unless(in_array($scope, ['all', 'company', 'employees', 'vehicles'], true), Response::HTTP_NOT_FOUND);
-
-        $documents = $this->companyDocumentsQuery($company, $scope)
-            ->with(['template.section', 'subtemplate', 'documentable'])
-            ->orderBy('template_id')
-            ->orderBy('subtemplate_id')
-            ->get();
+        $filter = request()->query('filter', 'all');
+        $report = app(CompanyDocumentOverviewReport::class);
+        $filterLabel = $report->filterLabel($filter);
 
         $scopeLabel = match ($scope) {
             'company' => 'societa',
@@ -71,12 +69,16 @@ class DocumentDownloadController extends Controller
             'vehicles' => 'veicoli',
             default => 'tutti',
         };
+        $title = $filter === 'all'
+            ? 'Riepilogo documenti - '.$company->name
+            : 'Riepilogo '.$filterLabel.' - '.$company->name;
+        $fileSuffix = $filter === 'all' ? $scopeLabel : $this->slug($filterLabel).'-'.$scopeLabel;
 
         return $this->pdfResponse(
-            'Riepilogo documenti - '.$company->name,
-            ['Societa', 'Documento', 'Sezione', 'Scadenza'],
-            $this->companyDocumentReportRows($documents),
-            'riepilogo-documenti-'.$scopeLabel.'-'.$this->slug($company->name).'.pdf',
+            $title,
+            ['Sezione', 'Elemento', 'Documento', 'Stato', 'Date', 'Note'],
+            $report->pdfRows($company, $filter),
+            'riepilogo-documenti-'.$fileSuffix.'-'.$this->slug($company->name).'.pdf',
         );
     }
 
