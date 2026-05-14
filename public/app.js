@@ -8,7 +8,9 @@
         companyDocuments: [],
         documentFilter: 'all',
         employees: [],
+        employeeFilter: 'all',
         vehicles: [],
+        vehicleFilter: 'all',
     };
     const liveRefreshState = new Map();
     const renderSnapshotState = new Map();
@@ -421,6 +423,30 @@
         }
 
         return 'pending';
+    }
+
+    function entitySummary(entities) {
+        return entities.reduce((summary, entity) => {
+            const status = progressStatus(entity);
+
+            summary.total += 1;
+            summary[status] += 1;
+
+            return summary;
+        }, {
+            total: 0,
+            missing: 0,
+            pending: 0,
+            approved: 0,
+        });
+    }
+
+    function filteredEntities(entities, filter) {
+        if (filter === 'all') {
+            return entities;
+        }
+
+        return entities.filter((entity) => progressStatus(entity) === filter);
     }
 
     function entityDeletionMeta(entity) {
@@ -1890,6 +1916,7 @@
 
     async function refreshEmployees(options = {}) {
         const container = qs('[data-employees]');
+        const summary = qs('[data-employee-summary]');
         const silent = Boolean(options.silent);
 
         if (silent && shouldSkipSilentRefresh()) {
@@ -1898,10 +1925,58 @@
 
         if (!silent) {
             container.innerHTML = '<div class="spinner">Caricamento...</div>';
+            if (summary) {
+                summary.innerHTML = '<div class="summary-skeleton">Caricamento...</div>';
+            }
         }
 
         const data = await api('/employees');
         appState.employees = data.employees;
+
+        renderEmployeeSummary();
+        renderEmployees();
+    }
+
+    function renderEmployeeSummary() {
+        const container = qs('[data-employee-summary]');
+
+        if (!container) {
+            return;
+        }
+
+        const summary = entitySummary(appState.employees);
+        const cards = [
+            ['Totali', summary.total, 'all', 'all'],
+            ['Da caricare', summary.missing, 'missing', 'missing'],
+            ['In attesa', summary.pending, 'pending', 'pending'],
+            ['Approvati', summary.approved, 'approved', 'approved'],
+        ];
+
+        container.innerHTML = cards.map(([label, value, tone, filter]) => `
+            <button class="summary-card ${tone}" type="button" data-employee-filter="${escapeHtml(filter)}" aria-pressed="${appState.employeeFilter === filter}">
+                <span>${escapeHtml(label)}</span>
+                <strong>${escapeHtml(value)}</strong>
+            </button>
+        `).join('');
+
+        qsa('[data-employee-filter]', container).forEach((button) => {
+            button.addEventListener('click', () => {
+                setEmployeeFilter(button.dataset.employeeFilter || 'all');
+            });
+        });
+
+        setEmployeeFilter(appState.employeeFilter, { silent: true });
+    }
+
+    function setEmployeeFilter(filter = 'all') {
+        appState.employeeFilter = filter;
+
+        qsa('[data-employee-filter]').forEach((button) => {
+            const active = (button.dataset.employeeFilter || 'all') === filter;
+
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
 
         renderEmployees();
     }
@@ -1909,10 +1984,13 @@
     function renderEmployees() {
         const container = qs('[data-employees]');
         const search = (qs('[data-employee-search]')?.value || '').trim().toLowerCase();
-        const employees = appState.employees.filter((employee) => `${employee.first_name} ${employee.last_name}`.toLowerCase().includes(search));
+        const employees = filteredEntities(appState.employees, appState.employeeFilter)
+            .filter((employee) => `${employee.first_name} ${employee.last_name}`.toLowerCase().includes(search));
 
         if (!employees.length) {
-            container.innerHTML = '<div class="empty-state">Nessun dipendente presente.</div>';
+            container.innerHTML = appState.employees.length
+                ? '<div class="empty-state">Nessun dipendente trovato con questo filtro.</div>'
+                : '<div class="empty-state">Nessun dipendente presente.</div>';
             return;
         }
 
@@ -1952,6 +2030,7 @@
 
     async function refreshVehicles(options = {}) {
         const container = qs('[data-vehicles]');
+        const summary = qs('[data-vehicle-summary]');
         const silent = Boolean(options.silent);
 
         if (silent && shouldSkipSilentRefresh()) {
@@ -1960,10 +2039,58 @@
 
         if (!silent) {
             container.innerHTML = '<div class="spinner">Caricamento...</div>';
+            if (summary) {
+                summary.innerHTML = '<div class="summary-skeleton">Caricamento...</div>';
+            }
         }
 
         const data = await api('/vehicles');
         appState.vehicles = data.vehicles;
+
+        renderVehicleSummary();
+        renderVehicles();
+    }
+
+    function renderVehicleSummary() {
+        const container = qs('[data-vehicle-summary]');
+
+        if (!container) {
+            return;
+        }
+
+        const summary = entitySummary(appState.vehicles);
+        const cards = [
+            ['Totali', summary.total, 'all', 'all'],
+            ['Da caricare', summary.missing, 'missing', 'missing'],
+            ['In attesa', summary.pending, 'pending', 'pending'],
+            ['Approvati', summary.approved, 'approved', 'approved'],
+        ];
+
+        container.innerHTML = cards.map(([label, value, tone, filter]) => `
+            <button class="summary-card ${tone}" type="button" data-vehicle-filter="${escapeHtml(filter)}" aria-pressed="${appState.vehicleFilter === filter}">
+                <span>${escapeHtml(label)}</span>
+                <strong>${escapeHtml(value)}</strong>
+            </button>
+        `).join('');
+
+        qsa('[data-vehicle-filter]', container).forEach((button) => {
+            button.addEventListener('click', () => {
+                setVehicleFilter(button.dataset.vehicleFilter || 'all');
+            });
+        });
+
+        setVehicleFilter(appState.vehicleFilter, { silent: true });
+    }
+
+    function setVehicleFilter(filter = 'all') {
+        appState.vehicleFilter = filter;
+
+        qsa('[data-vehicle-filter]').forEach((button) => {
+            const active = (button.dataset.vehicleFilter || 'all') === filter;
+
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
 
         renderVehicles();
     }
@@ -1971,10 +2098,13 @@
     function renderVehicles() {
         const container = qs('[data-vehicles]');
         const search = (qs('[data-vehicle-search]')?.value || '').trim().toLowerCase();
-        const vehicles = appState.vehicles.filter((vehicle) => `${vehicle.plate} ${vehicle.capacity}`.toLowerCase().includes(search));
+        const vehicles = filteredEntities(appState.vehicles, appState.vehicleFilter)
+            .filter((vehicle) => `${vehicle.plate} ${vehicle.capacity}`.toLowerCase().includes(search));
 
         if (!vehicles.length) {
-            container.innerHTML = '<div class="empty-state">Nessun veicolo presente.</div>';
+            container.innerHTML = appState.vehicles.length
+                ? '<div class="empty-state">Nessun veicolo trovato con questo filtro.</div>'
+                : '<div class="empty-state">Nessun veicolo presente.</div>';
             return;
         }
 
