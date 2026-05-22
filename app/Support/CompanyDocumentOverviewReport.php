@@ -130,7 +130,7 @@ class CompanyDocumentOverviewReport
     {
         $documents = $owner->documents()
             ->whereNull('parent_uploaded_document_id')
-            ->with(['template', 'subtemplate', 'integrations'])
+            ->with(['template.section', 'subtemplate', 'integrations'])
             ->latest('updated_at')
             ->get()
             ->groupBy(fn (UploadedDocument $document): string => $this->documentKey($document->template_id, $document->subtemplate_id));
@@ -200,7 +200,7 @@ class CompanyDocumentOverviewReport
             'exemption' => $exemption,
             'notes' => $document?->admin_notes ?: $exemption?->admin_notes,
             'download_url' => $document ? route('admin.downloads.documents.show', $document) : null,
-            'review_url' => $document ? DocumentApprovalResource::getUrl('index', ['tableSearch' => (string) $document->id]) : null,
+            'review_url' => $document ? $this->reviewUrl($document) : null,
             'uploaded_at' => $document?->created_at?->format('d/m/Y H:i'),
             'expiry_date' => $document?->expiry_date?->format('d/m/Y'),
             'internal_expiry' => $document?->internal_expiry_date
@@ -243,6 +243,15 @@ class CompanyDocumentOverviewReport
             $owner instanceof Vehicle => $owner->capacity.' posti',
             default => null,
         };
+    }
+
+    private function reviewUrl(UploadedDocument $document): string
+    {
+        return DocumentApprovalResource::getUrl('index', [
+            'activeTab' => $document->template->section?->slug ?: 'societa',
+            'tableAction' => 'review',
+            'tableActionRecord' => (string) $document->getKey(),
+        ]);
     }
 
     private function documentKey(int $templateId, ?int $subtemplateId = null): string

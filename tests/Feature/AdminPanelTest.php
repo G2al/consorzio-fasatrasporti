@@ -380,6 +380,46 @@ class AdminPanelTest extends TestCase
             ->assertSee('Revisiona');
     }
 
+    public function test_company_document_overview_review_link_opens_specific_document_review(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $company = User::query()->create([
+            'name' => 'Revisione Diretta SRL',
+            'email' => 'revisione-diretta@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        Storage::disk('public')->put('uploaded-documents/panoramica/direct-review.pdf', 'PDF test');
+
+        $document = $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/panoramica/direct-review.pdf',
+            'status' => 'pending',
+            'has_expiry' => false,
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->get('/admin/users/'.$company->id.'/documenti')
+            ->assertOk()
+            ->assertSee('document-approvals', false)
+            ->assertSee('activeTab=societa', false)
+            ->assertSee('tableAction=review', false)
+            ->assertSee('tableActionRecord='.$document->id, false);
+    }
+
     public function test_admin_can_download_filtered_company_overview_pdf(): void
     {
         $this->seed();
