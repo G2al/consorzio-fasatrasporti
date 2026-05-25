@@ -82,6 +82,26 @@ class DocumentDownloadController extends Controller
         );
     }
 
+    public function companyOverviewPdf(User $company): Response
+    {
+        abort_unless($company->role === 'company', Response::HTTP_NOT_FOUND);
+
+        $filter = request()->query('filter', 'all');
+        $report = app(CompanyDocumentOverviewReport::class);
+        $filterLabel = $report->filterLabel($filter);
+        $title = $filter === 'all'
+            ? 'Panoramica totale societa - '.$company->name
+            : 'Panoramica '.$filterLabel.' societa - '.$company->name;
+        $fileSuffix = $filter === 'all' ? 'societa' : $this->slug($filterLabel).'-societa';
+
+        return $this->pdfResponse(
+            $title,
+            ['Societa', 'Documento', 'Stato', 'Date', 'Note'],
+            $report->companySectionPdfRows($company, $filter),
+            'panoramica-totale-'.$fileSuffix.'-'.$this->slug($company->name).'.pdf',
+        );
+    }
+
     public function template(DocumentTemplate $template): BinaryFileResponse
     {
         $documents = UploadedDocument::query()

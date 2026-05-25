@@ -102,6 +102,62 @@ class CompanyDocumentOverviewReport
         };
     }
 
+    public function companySectionSummary(User $company): array
+    {
+        $rows = collect($this->companySectionRows($company, 'all', false));
+
+        return [
+            'total' => $rows->count(),
+            'missing' => $rows->filter(fn (array $row): bool => in_array($row['status'], ['missing', 'expired'], true))->count(),
+            'pending' => $rows->where('status', 'pending')->count(),
+            'approved' => $rows->where('status', 'approved')->count(),
+            'rejected' => $rows->where('status', 'rejected')->count(),
+            'expired' => $rows->where('status', 'expired')->count(),
+            'expiring' => $rows->filter(fn (array $row): bool => $row['is_expiring'])->count(),
+            'exemptions' => $rows->filter(fn (array $row): bool => str_starts_with($row['status'], 'exemption_'))->count(),
+        ];
+    }
+
+    public function companySectionMatrix(User $company, string $filter = 'all'): array
+    {
+        $rows = $this->companySectionRows($company, $filter, true);
+
+        return [
+            'label' => $company->name,
+            'meta' => $company->email,
+            'rows' => $rows,
+        ];
+    }
+
+    public function companySectionPdfRows(User $company, string $filter = 'all'): array
+    {
+        return collect($this->companySectionRows($company, $filter, true))
+            ->map(function (array $row) use ($company): array {
+                $dateParts = [];
+
+                if ($row['uploaded_at']) {
+                    $dateParts[] = 'Caricato: '.$row['uploaded_at'];
+                }
+
+                if ($row['expiry_date']) {
+                    $dateParts[] = 'Scadenza: '.$row['expiry_date'];
+                }
+
+                if ($row['internal_expiry']) {
+                    $dateParts[] = $row['internal_expiry'];
+                }
+
+                return [
+                    $company->name,
+                    ($row['optional'] ? 'Opzionale - ' : '').$row['name'],
+                    $row['is_expiring'] ? 'In scadenza' : $row['status_label'],
+                    $dateParts !== [] ? implode(' | ', $dateParts) : '-',
+                    $row['notes'] ?: '-',
+                ];
+            })
+            ->all();
+    }
+
     private function sectionGroup(User $company, string $slug, string $title, Collection $owners, string $filter, bool $filtered): array
     {
         $section = Section::query()
@@ -146,6 +202,13 @@ class CompanyDocumentOverviewReport
             ->filter()
             ->values()
             ->all();
+    }
+
+    private function companySectionRows(User $company, string $filter, bool $filtered): array
+    {
+        $group = $this->sectionGroup($company, 'societa', 'Societa', collect([$company]), $filter, $filtered);
+
+        return $group['owners'][0]['rows'] ?? [];
     }
 
     private function templateRow(DocumentTemplate $template, Collection $documents, Collection $exemptions): array
@@ -193,6 +256,7 @@ class CompanyDocumentOverviewReport
 
         return [
             'name' => $name,
+            'short_name' => $this->shortDocumentName($name),
             'optional' => $optional,
             'status' => $status,
             'status_label' => $this->statusLabel($status),
@@ -209,6 +273,23 @@ class CompanyDocumentOverviewReport
             'is_expiring' => $document ? $this->isExpiring($document) : false,
             'children' => [],
         ];
+    }
+
+    private function shortDocumentName(string $name): string
+    {
+        return match ($name) {
+            'Albo Autotrasporti' => 'Albo Auto.',
+            'Albo Gestore Ambientale' => 'Albo Gest. Amb.',
+            'Attestato RLS' => 'Att. RLS',
+            'Attestato RSPP' => 'Att. RSPP',
+            'Attestato Primo Soccorso e Antincendio' => 'Primo Socc.',
+            'Autorizzazione 183' => 'Aut. 183',
+            'Autorizzazione 852' => 'Aut. 852',
+            'Casellario Giudiziale' => 'Casellario',
+            'Idoneità Tecnico Professionale' => 'Idon. Tecn. Prof.',
+            'Incarico Medico' => 'Inc. Medico',
+            default => $name,
+        };
     }
 
     private function statusLabel(string $status): string

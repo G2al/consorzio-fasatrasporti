@@ -380,6 +380,48 @@ class AdminPanelTest extends TestCase
             ->assertSee('Revisiona');
     }
 
+    public function test_admin_can_open_company_total_overview(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $company = User::query()->create([
+            'name' => 'Panoramica Totale SRL',
+            'email' => 'panoramica-totale@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->where('name', 'DURC')
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        Storage::disk('public')->put('uploaded-documents/panoramica/company-only.pdf', 'PDF test');
+
+        $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/panoramica/company-only.pdf',
+            'status' => 'pending',
+            'has_expiry' => false,
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->get('/admin/users/'.$company->id.'/panoramica-totale')
+            ->assertOk()
+            ->assertSee('Panoramica Totale SRL')
+            ->assertSee('Sezione Società')
+            ->assertSee('DURC')
+            ->assertSee('In attesa')
+            ->assertSee('Revisiona');
+    }
+
     public function test_company_document_overview_review_link_opens_specific_document_review(): void
     {
         $this->seed();
@@ -442,5 +484,29 @@ class AdminPanelTest extends TestCase
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf')
             ->assertHeader('content-disposition', 'attachment; filename="riepilogo-documenti-mancanti-tutti-filtro-pdf-srl.pdf"');
+    }
+
+    public function test_admin_can_download_company_total_overview_pdf(): void
+    {
+        $this->seed();
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $company = User::query()->create([
+            'name' => 'Panoramica Solo Societa SRL',
+            'email' => 'panoramica-solo-societa@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->get(route('admin.downloads.companies.company-overview.pdf', $company).'?filter=all')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf')
+            ->assertHeader('content-disposition', 'attachment; filename="panoramica-totale-societa-panoramica-solo-societa-srl.pdf"');
     }
 }
