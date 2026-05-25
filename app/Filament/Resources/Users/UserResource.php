@@ -153,11 +153,6 @@ class UserResource extends Resource
                         ->icon(Heroicon::OutlinedClipboardDocumentList)
                         ->color('gray')
                         ->url(fn (User $record): string => static::getUrl('documents', ['record' => $record])),
-                    Action::make('companySectionOverview')
-                        ->label('Panoramica totale')
-                        ->icon(Heroicon::OutlinedTableCells)
-                        ->color('primary')
-                        ->url(fn (User $record): string => static::getUrl('companyOverview', ['record' => $record])),
                     Action::make('downloadApproved')
                         ->label('Scarica ZIP')
                         ->icon(Heroicon::OutlinedArrowDownTray)
@@ -238,7 +233,7 @@ class UserResource extends Resource
             'create' => CreateUser::route('/create'),
             'edit' => EditUser::route('/{record}/edit'),
             'documents' => DocumentOverview::route('/{record}/documenti'),
-            'companyOverview' => CompanySectionOverview::route('/{record}/panoramica-totale'),
+            'companyOverview' => CompanySectionOverview::route('/panoramica-totale'),
         ];
     }
 }

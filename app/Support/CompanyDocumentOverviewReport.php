@@ -158,6 +158,107 @@ class CompanyDocumentOverviewReport
             ->all();
     }
 
+    public function globalCompanySectionSummary(): array
+    {
+        $rows = User::query()
+            ->where('role', 'company')
+            ->orderBy('name')
+            ->get()
+            ->flatMap(fn (User $company): array => $this->companySectionRows($company, 'all', false));
+
+        return [
+            'total' => $rows->count(),
+            'missing' => $rows->filter(fn (array $row): bool => in_array($row['status'], ['missing', 'expired'], true))->count(),
+            'pending' => $rows->where('status', 'pending')->count(),
+            'approved' => $rows->where('status', 'approved')->count(),
+            'rejected' => $rows->where('status', 'rejected')->count(),
+            'expired' => $rows->where('status', 'expired')->count(),
+            'expiring' => $rows->filter(fn (array $row): bool => $row['is_expiring'])->count(),
+            'exemptions' => $rows->filter(fn (array $row): bool => str_starts_with($row['status'], 'exemption_'))->count(),
+        ];
+    }
+
+    public function globalCompanySectionMatrix(string $filter = 'all'): array
+    {
+        $companies = User::query()
+            ->where('role', 'company')
+            ->orderBy('name')
+            ->get();
+
+        $section = Section::query()
+            ->where('slug', 'societa')
+            ->with(['documentTemplates' => fn ($query) => $query->orderBy('name')])
+            ->first();
+
+        $columns = ($section?->documentTemplates ?? collect())
+            ->map(fn (DocumentTemplate $template): array => [
+                'key' => $template->name,
+                'name' => $template->name,
+                'short_name' => $this->shortDocumentName($template->name),
+            ])
+            ->values();
+
+        $owners = $companies
+            ->map(function (User $company): array {
+                $rows = collect($this->companySectionRows($company, 'all', false))
+                    ->keyBy('name');
+
+                return [
+                    'label' => $company->name,
+                    'meta' => $company->email,
+                    'cells' => $rows->all(),
+                ];
+            })
+            ->values();
+
+        if ($filter !== 'all') {
+            $owners = $owners
+                ->map(function (array $owner) use ($filter): array {
+                    $owner['cells'] = collect($owner['cells'])
+                        ->map(fn (array $row): ?array => $this->rowMatchesFilter($row, $filter) ? $row : null)
+                        ->filter()
+                        ->all();
+
+                    return $owner;
+                })
+                ->filter(fn (array $owner): bool => $owner['cells'] !== [])
+                ->values();
+
+            $visibleColumns = $owners
+                ->flatMap(fn (array $owner): array => array_keys($owner['cells']))
+                ->unique()
+                ->values()
+                ->all();
+
+            $columns = $columns
+                ->filter(fn (array $column): bool => in_array($column['key'], $visibleColumns, true))
+                ->values();
+        }
+
+        return [
+            'columns' => $columns->all(),
+            'owners' => $owners->all(),
+        ];
+    }
+
+    public function globalCompanySectionPdfRows(string $filter = 'all'): array
+    {
+        return collect($this->globalCompanySectionMatrix($filter)['owners'])
+            ->flatMap(function (array $owner): array {
+                return collect($owner['cells'])
+                    ->sortKeys()
+                    ->map(fn (array $row): array => [
+                        $owner['label'],
+                        ($row['optional'] ? 'Opzionale - ' : '').$row['name'],
+                        $row['is_expiring'] ? 'In scadenza' : $row['status_label'],
+                        $row['notes'] ?: '-',
+                    ])
+                    ->values()
+                    ->all();
+            })
+            ->all();
+    }
+
     private function sectionGroup(User $company, string $slug, string $title, Collection $owners, string $filter, bool $filtered): array
     {
         $section = Section::query()

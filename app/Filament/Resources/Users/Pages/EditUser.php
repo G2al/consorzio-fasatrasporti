@@ -28,12 +28,6 @@ class EditUser extends EditRecord
                 ->color('primary')
                 ->visible(fn (): bool => $this->record->role === 'company')
                 ->url(fn (): string => UserResource::getUrl('documents', ['record' => $this->record])),
-            Action::make('companySectionOverview')
-                ->label('Panoramica totale')
-                ->icon(Heroicon::OutlinedTableCells)
-                ->color('gray')
-                ->visible(fn (): bool => $this->record->role === 'company')
-                ->url(fn (): string => UserResource::getUrl('companyOverview', ['record' => $this->record])),
             Action::make('downloadCompanyApproved')
                 ->label('ZIP societa')
                 ->icon(Heroicon::OutlinedBuildingOffice)

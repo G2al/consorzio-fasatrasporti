@@ -21,7 +21,7 @@ Route::middleware('auth:admin')
         Route::get('/companies/{company}/{scope?}/pdf', [DocumentDownloadController::class, 'companyPdf'])
             ->whereIn('scope', ['all', 'company', 'employees', 'vehicles'])
             ->name('companies.pdf');
-        Route::get('/companies/{company}/company-overview/pdf', [DocumentDownloadController::class, 'companyOverviewPdf'])
+        Route::get('/company-overview/pdf', [DocumentDownloadController::class, 'companyOverviewPdf'])
             ->name('companies.company-overview.pdf');
         Route::get('/templates/{template}', [DocumentDownloadController::class, 'template'])
             ->name('templates.show');

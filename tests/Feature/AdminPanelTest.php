@@ -398,6 +398,15 @@ class AdminPanelTest extends TestCase
             'approved_at' => now(),
         ]);
 
+        $secondCompany = User::query()->create([
+            'name' => 'Seconda Azienda SRL',
+            'email' => 'seconda-azienda@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
         $template = DocumentTemplate::query()
             ->where('name', 'DURC')
             ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
@@ -412,14 +421,24 @@ class AdminPanelTest extends TestCase
             'has_expiry' => false,
         ]);
 
+        $secondCompany->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/panoramica/company-only.pdf',
+            'status' => 'approved',
+            'has_expiry' => false,
+        ]);
+
         $this->actingAs($admin, 'admin')
-            ->get('/admin/users/'.$company->id.'/panoramica-totale')
+            ->get('/admin/users/panoramica-totale')
             ->assertOk()
             ->assertSee('Panoramica Totale SRL')
-            ->assertSee('Sezione Società')
+            ->assertSee('Seconda Azienda SRL')
             ->assertSee('DURC')
             ->assertSee('In attesa')
-            ->assertSee('Revisiona');
+            ->assertSee('Sezione Societa')
+            ->assertDontSee('Revisiona')
+            ->assertDontSee('Scarica')
+            ->assertDontSee('Caricato il');
     }
 
     public function test_company_document_overview_review_link_opens_specific_document_review(): void
@@ -494,19 +513,10 @@ class AdminPanelTest extends TestCase
             ->where('email', 'admin@admin.com')
             ->firstOrFail();
 
-        $company = User::query()->create([
-            'name' => 'Panoramica Solo Societa SRL',
-            'email' => 'panoramica-solo-societa@example.com',
-            'password' => 'Password1',
-            'role' => 'company',
-            'approval_status' => 'approved',
-            'approved_at' => now(),
-        ]);
-
         $this->actingAs($admin, 'admin')
-            ->get(route('admin.downloads.companies.company-overview.pdf', $company).'?filter=all')
+            ->get(route('admin.downloads.companies.company-overview.pdf').'?filter=all')
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf')
-            ->assertHeader('content-disposition', 'attachment; filename="panoramica-totale-societa-panoramica-solo-societa-srl.pdf"');
+            ->assertHeader('content-disposition', 'attachment; filename="panoramica-totale-societa-tutte.pdf"');
     }
 }
