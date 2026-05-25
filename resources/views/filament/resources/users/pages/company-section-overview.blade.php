@@ -44,10 +44,10 @@
         .company-table td:first-child { width: 128px; min-width: 128px; max-width: 128px; position: sticky; left: 0; z-index: 3; background: #ffffff; box-shadow: 8px 0 12px rgba(15, 23, 42, 0.08); }
         .company-table thead th:first-child { z-index: 4; background: #fbfcfd; }
         .company-table th:not(:first-child),
-        .company-table td:not(:first-child) { min-width: 156px; }
+        .company-table td:not(:first-child) { min-width: 108px; }
         .company-company-cell strong { display: block; color: #0f172a; font-size: 11px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
         .company-company-cell span { display: block; margin-top: 2px; color: #64748b; font-size: 10px; line-height: 1.15; overflow-wrap: anywhere; }
-        .company-doc-cell { display: grid; align-content: start; justify-items: start; gap: 8px; min-width: 132px; min-height: 60px; }
+        .company-doc-cell { display: grid; align-content: start; justify-items: start; gap: 3px; min-width: 88px; min-height: 60px; }
         .company-doc-heading { display: inline-block; text-decoration: underline dotted rgba(100, 116, 139, 0.85); text-underline-offset: 3px; text-decoration-thickness: 1px; cursor: help; }
         .company-doc-status { display: inline-flex; width: fit-content; min-width: 76px; justify-content: center; border-radius: 999px; padding: 5px 11px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); font-size: 9px; font-weight: 800; letter-spacing: .01em; line-height: 1.1; margin-top: 4px; }
         .company-doc-status.missing { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
@@ -80,8 +80,8 @@
             .company-table th:first-child,
             .company-table td:first-child { width: 112px; min-width: 112px; max-width: 112px; }
             .company-table th:not(:first-child),
-            .company-table td:not(:first-child) { min-width: 132px; }
-            .company-doc-cell { min-width: 116px; }
+            .company-table td:not(:first-child) { min-width: 98px; }
+            .company-doc-cell { min-width: 80px; }
         }
     </style>
 
