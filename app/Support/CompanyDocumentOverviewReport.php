@@ -378,17 +378,29 @@ class CompanyDocumentOverviewReport
 
     private function shortDocumentName(string $name): string
     {
-        return match ($name) {
-            'Albo Autotrasporti' => 'Albo Auto.',
-            'Albo Gestore Ambientale' => 'Albo Gest. Amb.',
-            'Attestato RLS' => 'Att. RLS',
-            'Attestato RSPP' => 'Att. RSPP',
-            'Attestato Primo Soccorso e Antincendio' => 'Primo Socc.',
-            'Autorizzazione 183' => 'Aut. 183',
-            'Autorizzazione 852' => 'Aut. 852',
-            'Casellario Giudiziale' => 'Casellario',
-            'Idoneità Tecnico Professionale' => 'Idon. Tecn. Prof.',
-            'Incarico Medico' => 'Inc. Medico',
+        $normalized = str_replace("'", ' ', mb_strtolower($name));
+
+        return match (true) {
+            str_contains($normalized, 'albo autotrasporti') => 'Albo Auto.',
+            str_contains($normalized, 'albo gestore ambientale') => 'Albo Gest. Amb.',
+            str_contains($normalized, 'attestato rls') => 'Att. RLS',
+            str_contains($normalized, 'attestato rspp') => 'Att. RSPP',
+            str_contains($normalized, 'primo soccorso') || str_contains($normalized, 'antincendio') => 'Primo Socc.',
+            str_contains($normalized, 'autorizzazione 183') => 'Aut. 183',
+            str_contains($normalized, 'autorizzazione 852') => 'Aut. 852',
+            str_contains($normalized, 'casellario giudiziale') => 'Casellario',
+            str_contains($normalized, 'idoneit') && str_contains($normalized, 'tecnico') => 'Idon. Tecn. Prof.',
+            str_contains($normalized, 'incarico medico') => 'Inc. Medico',
+            str_contains($normalized, 'documento') && str_contains($normalized, 'amministratore') => 'Doc. Amm.',
+            str_contains($normalized, 'quota') && str_contains($normalized, 'gestore') => 'Quota Gest.',
+            str_contains($normalized, 'quota') && str_contains($normalized, 'trasport') => 'Quota Trasp.',
+            str_contains($normalized, 'visura') && str_contains($normalized, 'camer') => 'Visura Cam.',
+            str_contains($normalized, 'bilancio') => 'Bilancio',
+            str_contains($normalized, 'durc') => 'DURC',
+            str_contains($normalized, 'durf') => 'DURF',
+            str_contains($normalized, 'dvr') => 'DVR',
+            str_contains($normalized, 'haccp') => 'HACCP',
+            str_contains($normalized, 'ren') => 'REN',
             default => $name,
         };
     }

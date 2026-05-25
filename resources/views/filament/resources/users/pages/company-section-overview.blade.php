@@ -37,16 +37,17 @@
         .company-panel-count { color: #64748b; font-size: 11px; font-weight: 700; }
         .company-table-wrap { overflow-x: auto; }
         .company-table { width: 100%; min-width: 560px; border-collapse: collapse; table-layout: fixed; }
-        .company-table th { padding: 8px 8px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
-        .company-table td { padding: 7px 8px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
+        .company-table th { padding: 8px 9px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+        .company-table td { padding: 12px 9px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
+        .company-table tbody tr { min-height: 74px; }
         .company-table th:first-child,
         .company-table td:first-child { width: 128px; min-width: 128px; max-width: 128px; position: sticky; left: 0; z-index: 3; background: #ffffff; box-shadow: 8px 0 12px rgba(15, 23, 42, 0.08); }
         .company-table thead th:first-child { z-index: 4; background: #fbfcfd; }
         .company-company-cell strong { display: block; color: #0f172a; font-size: 11px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
         .company-company-cell span { display: block; margin-top: 2px; color: #64748b; font-size: 10px; line-height: 1.15; overflow-wrap: anywhere; }
-        .company-doc-cell { display: grid; gap: 4px; min-width: 62px; }
-        .company-doc-heading { display: inline-block; text-decoration: underline dotted rgba(100, 116, 139, 0.65); text-underline-offset: 2px; cursor: help; }
-        .company-doc-status { display: inline-flex; width: fit-content; min-width: 58px; justify-content: center; border-radius: 999px; padding: 3px 8px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); font-size: 9px; font-weight: 800; letter-spacing: .01em; line-height: 1.1; }
+        .company-doc-cell { display: grid; align-content: start; gap: 6px; min-width: 72px; min-height: 50px; }
+        .company-doc-heading { display: inline-block; text-decoration: underline dotted rgba(100, 116, 139, 0.85); text-underline-offset: 3px; text-decoration-thickness: 1px; cursor: help; }
+        .company-doc-status { display: inline-flex; width: fit-content; min-width: 64px; justify-content: center; border-radius: 999px; padding: 4px 9px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); font-size: 9px; font-weight: 800; letter-spacing: .01em; line-height: 1.1; margin-top: 2px; }
         .company-doc-status.missing { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
         .company-doc-status.pending { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
         .company-doc-status.approved { background: #dcfce7; border-color: #22c55e; color: #166534; }
@@ -56,7 +57,7 @@
         .company-doc-status.exemption-approved { background: #d1fae5; border-color: #10b981; color: #065f46; }
         .company-doc-status.exemption-pending { background: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }
         .company-doc-status.exemption-rejected { background: #fce7f3; border-color: #ec4899; color: #9d174d; }
-        .company-doc-note { color: #92400e; font-size: 9px; line-height: 1.15; overflow-wrap: anywhere; max-width: 88px; }
+        .company-doc-note { color: #92400e; font-size: 9px; line-height: 1.18; overflow-wrap: anywhere; max-width: 94px; }
         .company-empty { padding: 18px; color: #64748b; font-size: 14px; }
         .dark .company-summary-card,
         .dark .company-panel { background: #111827; border-color: rgba(148, 163, 184, .22); }
@@ -76,7 +77,7 @@
             .company-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .company-table th:first-child,
             .company-table td:first-child { width: 112px; min-width: 112px; max-width: 112px; }
-            .company-doc-cell { min-width: 56px; }
+            .company-doc-cell { min-width: 64px; }
         }
     </style>
 
