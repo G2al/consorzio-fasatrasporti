@@ -18,6 +18,10 @@
     <style>
         .company-overview { display: grid; gap: 18px; }
         .company-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+        .company-toolbar { display: flex; align-items: center; gap: 12px; }
+        .company-search { width: min(360px, 100%); }
+        .company-search input { width: 100%; border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: white; color: #0f172a; padding: 11px 14px; font-size: 14px; outline: none; transition: border-color .16s ease, box-shadow .16s ease; }
+        .company-search input:focus { border-color: rgba(15, 118, 110, .55); box-shadow: 0 0 0 3px rgba(15, 118, 110, .12); }
         .company-summary-card { display: block; border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: white; padding: 12px 14px; text-decoration: none; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
         .company-summary-card:hover { border-color: rgba(15, 118, 110, .38); background: #f8fafc; transform: translateY(-1px); }
         .company-summary-card.is-active { border-color: rgba(15, 118, 110, .65); background: #eef5f4; }
@@ -35,7 +39,8 @@
         .company-panel-head h3 { margin: 0; color: #111827; font-size: 15px; font-weight: 750; }
         .company-panel-head p { margin: 2px 0 0; color: #64748b; font-size: 11px; }
         .company-panel-count { color: #64748b; font-size: 11px; font-weight: 700; }
-        .company-table-wrap { overflow-x: auto; }
+        .company-table-wrap { overflow-x: auto; cursor: grab; }
+        .company-table-wrap.is-dragging { cursor: grabbing; user-select: none; }
         .company-table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; }
         .company-table th { padding: 8px 12px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
         .company-table td { padding: 18px 12px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
@@ -63,6 +68,8 @@
         .company-empty { padding: 18px; color: #64748b; font-size: 14px; }
         .dark .company-summary-card,
         .dark .company-panel { background: #111827; border-color: rgba(148, 163, 184, .22); }
+        .dark .company-search input { background: #111827; color: #ffffff; border-color: rgba(148, 163, 184, .22); }
+        .dark .company-search input:focus { border-color: rgba(45, 212, 191, .45); box-shadow: 0 0 0 3px rgba(45, 212, 191, .12); }
         .dark .company-summary-card:hover,
         .dark .company-summary-card.is-active { background: #0f172a; border-color: rgba(45, 212, 191, .45); }
         .dark .company-summary-card strong,
@@ -76,6 +83,8 @@
         .dark .company-table th,
         .dark .company-panel-head { border-color: rgba(148, 163, 184, .18); }
         @media (max-width: 1100px) {
+            .company-toolbar { flex-direction: column; align-items: stretch; }
+            .company-search { width: 100%; }
             .company-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .company-table th:first-child,
             .company-table td:first-child { width: 112px; min-width: 112px; max-width: 112px; }
@@ -86,6 +95,16 @@
     </style>
 
     <div class="company-overview" wire:poll.15s>
+        <div class="company-toolbar">
+            <label class="company-search">
+                <input
+                    type="text"
+                    wire:model.live.debounce.300ms="search"
+                    placeholder="Cerca societa o email"
+                >
+            </label>
+        </div>
+
         <div class="company-summary">
             @foreach ($cards as $card)
                 <a
@@ -111,7 +130,7 @@
             @if ($matrix['columns'] === [] || $matrix['owners'] === [])
                 <div class="company-empty">Nessun documento della sezione societa presente per questo filtro.</div>
             @else
-                <div class="company-table-wrap">
+                <div class="company-table-wrap" data-drag-scroll>
                     <table class="company-table">
                         <thead>
                             <tr>
@@ -160,4 +179,55 @@
             @endif
         </section>
     </div>
+
+    <script>
+        (() => {
+            function bindDragScroll() {
+                document.querySelectorAll('[data-drag-scroll]').forEach((element) => {
+                    if (element.dataset.dragScrollBound === 'true') {
+                        return;
+                    }
+
+                    element.dataset.dragScrollBound = 'true';
+
+                    let isDragging = false;
+                    let startX = 0;
+                    let startScrollLeft = 0;
+
+                    element.addEventListener('mousedown', (event) => {
+                        if (event.button !== 0 || event.target.closest('a, button, input, textarea, select, label')) {
+                            return;
+                        }
+
+                        isDragging = true;
+                        startX = event.pageX;
+                        startScrollLeft = element.scrollLeft;
+                        element.classList.add('is-dragging');
+                        event.preventDefault();
+                    });
+
+                    element.addEventListener('mousemove', (event) => {
+                        if (!isDragging) {
+                            return;
+                        }
+
+                        const delta = event.pageX - startX;
+                        element.scrollLeft = startScrollLeft - delta;
+                    });
+
+                    const stopDragging = () => {
+                        isDragging = false;
+                        element.classList.remove('is-dragging');
+                    };
+
+                    element.addEventListener('mouseleave', stopDragging);
+                    element.addEventListener('mouseup', stopDragging);
+                    window.addEventListener('mouseup', stopDragging);
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', bindDragScroll);
+            document.addEventListener('livewire:navigated', bindDragScroll);
+        })();
+    </script>
 </x-filament-panels::page>

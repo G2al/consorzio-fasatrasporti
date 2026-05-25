@@ -19,6 +19,9 @@ class CompanySectionOverview extends Page
     #[Url(as: 'filter')]
     public string $filter = 'all';
 
+    #[Url(as: 'search')]
+    public string $search = '';
+
     public function getTitle(): string|Htmlable
     {
         return 'Panoramica totale';
@@ -65,13 +68,14 @@ class CompanySectionOverview extends Page
 
     public function matrix(): array
     {
-        return $this->report()->globalCompanySectionMatrix($this->filter);
+        return $this->report()->globalCompanySectionMatrix($this->filter, $this->search);
     }
 
     public function filterUrl(string $filter): string
     {
         return UserResource::getUrl('companyOverview', [
             'filter' => $filter,
+            'search' => $this->search !== '' ? $this->search : null,
         ]);
     }
 

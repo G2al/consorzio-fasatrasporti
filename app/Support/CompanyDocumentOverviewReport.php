@@ -178,7 +178,7 @@ class CompanyDocumentOverviewReport
         ];
     }
 
-    public function globalCompanySectionMatrix(string $filter = 'all'): array
+    public function globalCompanySectionMatrix(string $filter = 'all', string $search = ''): array
     {
         $companies = User::query()
             ->where('role', 'company')
@@ -210,6 +210,19 @@ class CompanyDocumentOverviewReport
                 ];
             })
             ->values();
+
+        $search = trim($search);
+
+        if ($search !== '') {
+            $needle = mb_strtolower($search);
+
+            $owners = $owners
+                ->filter(function (array $owner) use ($needle): bool {
+                    return str_contains(mb_strtolower($owner['label']), $needle)
+                        || str_contains(mb_strtolower((string) ($owner['meta'] ?? '')), $needle);
+                })
+                ->values();
+        }
 
         if ($filter !== 'all') {
             $owners = $owners
