@@ -32,21 +32,21 @@
         .company-summary-card.exemptions strong { color: #166534; }
         .company-panel { border: 1px solid rgba(148, 163, 184, .28); border-radius: 12px; background: white; overflow: hidden; }
         .company-panel-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 9px 11px; background: #f8fafc; border-bottom: 1px solid rgba(148, 163, 184, .2); }
-        .company-panel-head h3 { margin: 0; color: #111827; font-size: 14px; font-weight: 750; }
-        .company-panel-head p { margin: 1px 0 0; color: #64748b; font-size: 10px; }
-        .company-panel-count { color: #64748b; font-size: 10px; font-weight: 700; }
+        .company-panel-head h3 { margin: 0; color: #111827; font-size: 15px; font-weight: 750; }
+        .company-panel-head p { margin: 2px 0 0; color: #64748b; font-size: 11px; }
+        .company-panel-count { color: #64748b; font-size: 11px; font-weight: 700; }
         .company-table-wrap { overflow-x: auto; }
         .company-table { width: 100%; min-width: 560px; border-collapse: collapse; table-layout: fixed; }
-        .company-table th { padding: 6px 6px; color: #64748b; font-size: 8px; line-height: 1.08; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
-        .company-table td { padding: 5px 6px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 9px; }
+        .company-table th { padding: 8px 8px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+        .company-table td { padding: 7px 8px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
         .company-table th:first-child,
-        .company-table td:first-child { width: 104px; min-width: 104px; max-width: 104px; position: sticky; left: 0; z-index: 3; background: #ffffff; box-shadow: 8px 0 12px rgba(15, 23, 42, 0.08); }
+        .company-table td:first-child { width: 128px; min-width: 128px; max-width: 128px; position: sticky; left: 0; z-index: 3; background: #ffffff; box-shadow: 8px 0 12px rgba(15, 23, 42, 0.08); }
         .company-table thead th:first-child { z-index: 4; background: #fbfcfd; }
-        .company-company-cell strong { display: block; color: #0f172a; font-size: 10px; font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
-        .company-company-cell span { display: block; margin-top: 1px; color: #64748b; font-size: 9px; line-height: 1.15; overflow-wrap: anywhere; }
-        .company-doc-cell { display: grid; gap: 2px; min-width: 44px; }
+        .company-company-cell strong { display: block; color: #0f172a; font-size: 11px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
+        .company-company-cell span { display: block; margin-top: 2px; color: #64748b; font-size: 10px; line-height: 1.15; overflow-wrap: anywhere; }
+        .company-doc-cell { display: grid; gap: 4px; min-width: 62px; }
         .company-doc-heading { display: inline-block; text-decoration: underline dotted rgba(100, 116, 139, 0.65); text-underline-offset: 2px; cursor: help; }
-        .company-doc-status { display: inline-flex; width: fit-content; min-width: 48px; justify-content: center; border-radius: 999px; padding: 2px 5px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); font-size: 8px; font-weight: 800; letter-spacing: .01em; line-height: 1.05; }
+        .company-doc-status { display: inline-flex; width: fit-content; min-width: 58px; justify-content: center; border-radius: 999px; padding: 3px 8px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); font-size: 9px; font-weight: 800; letter-spacing: .01em; line-height: 1.1; }
         .company-doc-status.missing { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
         .company-doc-status.pending { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
         .company-doc-status.approved { background: #dcfce7; border-color: #22c55e; color: #166534; }
@@ -56,7 +56,7 @@
         .company-doc-status.exemption-approved { background: #d1fae5; border-color: #10b981; color: #065f46; }
         .company-doc-status.exemption-pending { background: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }
         .company-doc-status.exemption-rejected { background: #fce7f3; border-color: #ec4899; color: #9d174d; }
-        .company-doc-note { color: #92400e; font-size: 8px; line-height: 1.1; overflow-wrap: anywhere; max-width: 68px; }
+        .company-doc-note { color: #92400e; font-size: 9px; line-height: 1.15; overflow-wrap: anywhere; max-width: 88px; }
         .company-empty { padding: 18px; color: #64748b; font-size: 14px; }
         .dark .company-summary-card,
         .dark .company-panel { background: #111827; border-color: rgba(148, 163, 184, .22); }
@@ -75,8 +75,8 @@
         @media (max-width: 1100px) {
             .company-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .company-table th:first-child,
-            .company-table td:first-child { width: 96px; min-width: 96px; max-width: 96px; }
-            .company-doc-cell { min-width: 40px; }
+            .company-table td:first-child { width: 112px; min-width: 112px; max-width: 112px; }
+            .company-doc-cell { min-width: 56px; }
         }
     </style>
 
