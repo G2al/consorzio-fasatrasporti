@@ -36,18 +36,20 @@
         .company-panel-head p { margin: 2px 0 0; color: #64748b; font-size: 11px; }
         .company-panel-count { color: #64748b; font-size: 11px; font-weight: 700; }
         .company-table-wrap { overflow-x: auto; }
-        .company-table { width: 100%; min-width: 560px; border-collapse: collapse; table-layout: fixed; }
-        .company-table th { padding: 8px 9px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
-        .company-table td { padding: 12px 9px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
-        .company-table tbody tr { min-height: 74px; }
+        .company-table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; }
+        .company-table th { padding: 8px 12px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+        .company-table td { padding: 18px 12px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
+        .company-table tbody tr { min-height: 88px; }
         .company-table th:first-child,
         .company-table td:first-child { width: 128px; min-width: 128px; max-width: 128px; position: sticky; left: 0; z-index: 3; background: #ffffff; box-shadow: 8px 0 12px rgba(15, 23, 42, 0.08); }
         .company-table thead th:first-child { z-index: 4; background: #fbfcfd; }
+        .company-table th:not(:first-child),
+        .company-table td:not(:first-child) { min-width: 156px; }
         .company-company-cell strong { display: block; color: #0f172a; font-size: 11px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
         .company-company-cell span { display: block; margin-top: 2px; color: #64748b; font-size: 10px; line-height: 1.15; overflow-wrap: anywhere; }
-        .company-doc-cell { display: grid; align-content: start; gap: 6px; min-width: 72px; min-height: 50px; }
+        .company-doc-cell { display: grid; align-content: start; justify-items: start; gap: 8px; min-width: 132px; min-height: 60px; }
         .company-doc-heading { display: inline-block; text-decoration: underline dotted rgba(100, 116, 139, 0.85); text-underline-offset: 3px; text-decoration-thickness: 1px; cursor: help; }
-        .company-doc-status { display: inline-flex; width: fit-content; min-width: 64px; justify-content: center; border-radius: 999px; padding: 4px 9px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); font-size: 9px; font-weight: 800; letter-spacing: .01em; line-height: 1.1; margin-top: 2px; }
+        .company-doc-status { display: inline-flex; width: fit-content; min-width: 76px; justify-content: center; border-radius: 999px; padding: 5px 11px; border: 1px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); font-size: 9px; font-weight: 800; letter-spacing: .01em; line-height: 1.1; margin-top: 4px; }
         .company-doc-status.missing { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
         .company-doc-status.pending { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
         .company-doc-status.approved { background: #dcfce7; border-color: #22c55e; color: #166534; }
@@ -77,7 +79,9 @@
             .company-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .company-table th:first-child,
             .company-table td:first-child { width: 112px; min-width: 112px; max-width: 112px; }
-            .company-doc-cell { min-width: 64px; }
+            .company-table th:not(:first-child),
+            .company-table td:not(:first-child) { min-width: 132px; }
+            .company-doc-cell { min-width: 116px; }
         }
     </style>
 
