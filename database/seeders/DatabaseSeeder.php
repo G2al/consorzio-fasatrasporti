@@ -7,6 +7,7 @@ use App\Models\Section;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
@@ -95,6 +96,52 @@ class DatabaseSeeder extends Seeder
                     ],
                 );
             }
+        }
+
+        if (app()->environment('testing')) {
+            return;
+        }
+
+        $demoCompanies = [
+            'Alba Trasporti SRL',
+            'Arel Logistica SRL',
+            'Ares Trasporti SRL',
+            'Autotrasporti G.M.C. SRL',
+            'Autotrasporti Parenti SRL',
+            'Autotrasporti LA SRL',
+            'C.L.A. Trasporti e Logistica SRL',
+            'Conte Autotrasporti SRL',
+            'DSC Trasporti SRL',
+            'Eco Cargo Italia SRL',
+            'Futura Logistica SRL',
+            'Global Road Service SRL',
+            'Ital Move Trasporti SRL',
+            'Luna Trasporti e Servizi SRL',
+            'Mondo Gioielli SRL',
+            'Nord Cargo SRL',
+            'Orione Trasporti SRL',
+            'Prima Linea Logistica SRL',
+            'Road Fast Italia SRL',
+            'Vega Trasporti Integrati SRL',
+        ];
+
+        foreach ($demoCompanies as $index => $companyName) {
+            $number = str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT);
+            $email = Str::slug($companyName, '.').'.'.$number.'@example.com';
+
+            User::query()->updateOrCreate(
+                ['email' => $email],
+                [
+                    'name' => $companyName,
+                    'password' => 'password',
+                    'role' => 'company',
+                    'approval_status' => 'approved',
+                    'approved_at' => now(),
+                    'responsible_name' => 'Responsabile '.$number,
+                    'responsible_phone' => '3330000'.$number,
+                    'vat_number' => 'IT'.str_pad((string) (10000000000 + $index), 11, '0', STR_PAD_LEFT),
+                ],
+            );
         }
     }
 }

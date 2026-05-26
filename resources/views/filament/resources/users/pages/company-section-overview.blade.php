@@ -16,9 +16,10 @@
     @endphp
 
     <style>
-        .company-overview { display: grid; gap: 18px; }
-        .company-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-        .company-toolbar { display: flex; align-items: center; gap: 12px; }
+        .company-overview { display: grid; gap: 18px; min-width: 0; }
+        .company-overview > * { min-width: 0; }
+        .company-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; width: 100%; min-width: 0; }
+        .company-toolbar { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; }
         .company-search { width: min(360px, 100%); }
         .company-search input { width: 100%; border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: white; color: #0f172a; padding: 11px 14px; font-size: 14px; outline: none; transition: border-color .16s ease, box-shadow .16s ease; }
         .company-search input:focus { border-color: rgba(15, 118, 110, .55); box-shadow: 0 0 0 3px rgba(15, 118, 110, .12); }
@@ -34,21 +35,29 @@
         .company-summary-card.expiring strong { color: #92400e; }
         .company-summary-card.approved strong,
         .company-summary-card.exemptions strong { color: #166534; }
-        .company-panel { border: 1px solid rgba(148, 163, 184, .28); border-radius: 12px; background: white; overflow: hidden; }
+        .company-panel { border: 1px solid rgba(148, 163, 184, .28); border-radius: 12px; background: white; overflow: visible; position: relative; width: 100%; min-width: 0; }
         .company-panel-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 9px 11px; background: #f8fafc; border-bottom: 1px solid rgba(148, 163, 184, .2); }
         .company-panel-head h3 { margin: 0; color: #111827; font-size: 15px; font-weight: 750; }
         .company-panel-head p { margin: 2px 0 0; color: #64748b; font-size: 11px; }
         .company-panel-count { color: #64748b; font-size: 11px; font-weight: 700; }
-        .company-table-wrap { overflow-x: auto; cursor: grab; }
+        .company-sticky-head { position: sticky; top: 5rem; z-index: 30; display: none; margin-bottom: -1px; width: 100%; min-width: 0; }
+        .company-sticky-head.is-active { display: block; }
+        .company-sticky-head-inner { overflow: hidden; border-bottom: 1px solid rgba(148, 163, 184, .18); background: #fbfcfd; }
+        .company-sticky-head table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; will-change: transform; }
+        .company-table-wrap { overflow-x: auto; overflow-y: visible; cursor: grab; position: relative; width: 100%; max-width: 100%; min-width: 0; }
         .company-table-wrap.is-dragging { cursor: grabbing; user-select: none; }
         .company-table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; }
-        .company-table th { position: sticky; top: 0; z-index: 5; padding: 8px 12px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+        .company-table th,
+        .company-sticky-head th { padding: 8px 12px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
         .company-table td { padding: 18px 12px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
         .company-table tbody tr { min-height: 88px; }
         .company-table th:first-child,
+        .company-sticky-head th:first-child,
         .company-table td:first-child { width: 128px; min-width: 128px; max-width: 128px; position: sticky; left: 0; z-index: 3; background: #ffffff; box-shadow: 8px 0 12px rgba(15, 23, 42, 0.08); }
-        .company-table thead th:first-child { z-index: 8; background: #fbfcfd; }
+        .company-table th:first-child,
+        .company-sticky-head th:first-child { background: #fbfcfd; z-index: 4; }
         .company-table th:not(:first-child),
+        .company-sticky-head th:not(:first-child),
         .company-table td:not(:first-child) { min-width: 108px; }
         .company-company-cell strong { display: block; color: #0f172a; font-size: 11px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
         .company-company-cell span { display: block; margin-top: 2px; color: #64748b; font-size: 10px; line-height: 1.15; overflow-wrap: anywhere; }
@@ -77,18 +86,24 @@
         .dark .company-company-cell strong { color: #ffffff; }
         .dark .company-panel-head,
         .dark .company-table th,
-        .dark .company-table thead th:first-child { background: #0f172a; }
+        .dark .company-sticky-head th,
+        .dark .company-table th:first-child,
+        .dark .company-sticky-head th:first-child { background: #0f172a; }
+        .dark .company-sticky-head-inner { background: #0f172a; border-color: rgba(148, 163, 184, .18); }
         .dark .company-table td:first-child { background: #111827; box-shadow: 12px 0 18px rgba(2, 6, 23, 0.45); }
         .dark .company-table td,
         .dark .company-table th,
+        .dark .company-sticky-head th,
         .dark .company-panel-head { border-color: rgba(148, 163, 184, .18); }
         @media (max-width: 1100px) {
             .company-toolbar { flex-direction: column; align-items: stretch; }
             .company-search { width: 100%; }
             .company-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .company-table th:first-child,
+            .company-sticky-head th:first-child,
             .company-table td:first-child { width: 112px; min-width: 112px; max-width: 112px; }
             .company-table th:not(:first-child),
+            .company-sticky-head th:not(:first-child),
             .company-table td:not(:first-child) { min-width: 98px; }
             .company-doc-cell { min-width: 80px; }
         }
@@ -118,7 +133,7 @@
             @endforeach
         </div>
 
-        <section class="company-panel">
+        <section class="company-panel" data-company-panel>
             <div class="company-panel-head">
                 <div>
                     <h3>Sezione Societa</h3>
@@ -130,10 +145,14 @@
             @if ($matrix['columns'] === [] || $matrix['owners'] === [])
                 <div class="company-empty">Nessun documento della sezione societa presente per questo filtro.</div>
             @else
-                <div class="company-table-wrap" data-drag-scroll>
-                    <table class="company-table">
+                <div class="company-sticky-head" data-company-sticky-head aria-hidden="true">
+                    <div class="company-sticky-head-inner" data-company-sticky-head-inner></div>
+                </div>
+
+                <div class="company-table-wrap" data-drag-scroll data-company-table-wrap>
+                    <table class="company-table" data-company-table>
                         <thead>
-                            <tr>
+                            <tr data-company-header-row>
                                 <th>Societa</th>
                                 @foreach ($matrix['columns'] as $column)
                                     <th><span class="company-doc-heading" title="{{ $column['name'] }}">{{ $column['short_name'] }}</span></th>
@@ -182,6 +201,72 @@
 
     <script>
         (() => {
+            function bindCompanyStickyHeader() {
+                document.querySelectorAll('[data-company-panel]').forEach((panel) => {
+                    const wrap = panel.querySelector('[data-company-table-wrap]');
+                    const table = panel.querySelector('[data-company-table]');
+                    const stickyHead = panel.querySelector('[data-company-sticky-head]');
+                    const stickyHeadInner = panel.querySelector('[data-company-sticky-head-inner]');
+                    const sourceHead = table?.querySelector('thead');
+                    const sourceRow = table?.querySelector('[data-company-header-row]');
+
+                    if (!wrap || !table || !stickyHead || !stickyHeadInner || !sourceHead || !sourceRow) {
+                        return;
+                    }
+
+                    if (panel.dataset.companyStickyBound === 'true') {
+                        return;
+                    }
+
+                    panel.dataset.companyStickyBound = 'true';
+
+                    const cloneTable = document.createElement('table');
+                    cloneTable.className = 'company-table';
+                    cloneTable.setAttribute('aria-hidden', 'true');
+                    cloneTable.innerHTML = `<thead>${sourceHead.innerHTML}</thead>`;
+                    stickyHeadInner.replaceChildren(cloneTable);
+
+                    const syncHeaderState = () => {
+                        const sourceHeaders = Array.from(sourceRow.querySelectorAll('th'));
+                        const cloneHeaders = Array.from(cloneTable.querySelectorAll('th'));
+
+                        if (!sourceHeaders.length || sourceHeaders.length !== cloneHeaders.length) {
+                            return;
+                        }
+
+                        cloneTable.style.width = `${table.scrollWidth}px`;
+                        cloneTable.style.minWidth = `${table.scrollWidth}px`;
+
+                        sourceHeaders.forEach((header, index) => {
+                            const width = `${Math.ceil(header.getBoundingClientRect().width)}px`;
+                            cloneHeaders[index].style.width = width;
+                            cloneHeaders[index].style.minWidth = width;
+                            cloneHeaders[index].style.maxWidth = width;
+                        });
+
+                        cloneTable.style.transform = `translateX(${-wrap.scrollLeft}px)`;
+
+                        const stickyTop = 80;
+                        const headerBottom = stickyTop + stickyHead.offsetHeight;
+                        const rowRect = sourceRow.getBoundingClientRect();
+                        const wrapRect = wrap.getBoundingClientRect();
+                        const showSticky = rowRect.top <= stickyTop && wrapRect.bottom > headerBottom + 8;
+
+                        stickyHead.classList.toggle('is-active', showSticky);
+                    };
+
+                    wrap.addEventListener('scroll', () => {
+                        cloneTable.style.transform = `translateX(${-wrap.scrollLeft}px)`;
+                    }, { passive: true });
+
+                    window.addEventListener('scroll', syncHeaderState, { passive: true });
+                    window.addEventListener('resize', syncHeaderState);
+
+                    requestAnimationFrame(syncHeaderState);
+                    setTimeout(syncHeaderState, 60);
+                });
+            }
+
             function bindDragScroll() {
                 document.querySelectorAll('[data-drag-scroll]').forEach((element) => {
                     if (element.dataset.dragScrollBound === 'true') {
@@ -226,8 +311,13 @@
                 });
             }
 
-            document.addEventListener('DOMContentLoaded', bindDragScroll);
-            document.addEventListener('livewire:navigated', bindDragScroll);
+            function initCompanyOverviewInteractions() {
+                bindDragScroll();
+                bindCompanyStickyHeader();
+            }
+
+            document.addEventListener('DOMContentLoaded', initCompanyOverviewInteractions);
+            document.addEventListener('livewire:navigated', initCompanyOverviewInteractions);
         })();
     </script>
 </x-filament-panels::page>
