@@ -42,12 +42,12 @@
         .company-table-wrap { overflow-x: auto; cursor: grab; }
         .company-table-wrap.is-dragging { cursor: grabbing; user-select: none; }
         .company-table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; }
-        .company-table th { padding: 8px 12px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+        .company-table th { position: sticky; top: 0; z-index: 5; padding: 8px 12px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
         .company-table td { padding: 18px 12px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
         .company-table tbody tr { min-height: 88px; }
         .company-table th:first-child,
         .company-table td:first-child { width: 128px; min-width: 128px; max-width: 128px; position: sticky; left: 0; z-index: 3; background: #ffffff; box-shadow: 8px 0 12px rgba(15, 23, 42, 0.08); }
-        .company-table thead th:first-child { z-index: 4; background: #fbfcfd; }
+        .company-table thead th:first-child { z-index: 8; background: #fbfcfd; }
         .company-table th:not(:first-child),
         .company-table td:not(:first-child) { min-width: 108px; }
         .company-company-cell strong { display: block; color: #0f172a; font-size: 11px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; }
