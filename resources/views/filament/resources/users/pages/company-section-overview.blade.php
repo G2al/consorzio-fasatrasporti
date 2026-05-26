@@ -48,7 +48,7 @@
         .company-table-wrap.is-dragging { cursor: grabbing; user-select: none; }
         .company-table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; }
         .company-table th,
-        .company-sticky-head th { padding: 8px 12px 10px; color: #64748b; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+        .company-sticky-head th { padding: 8px 12px 10px; color: #ffffff; font-size: 8.5px; line-height: 1.16; text-align: left; text-transform: uppercase; background: #fbfcfd; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
         .company-table td { padding: 18px 12px; border-bottom: 1px solid rgba(148, 163, 184, .18); vertical-align: top; font-size: 10px; }
         .company-table tbody tr { min-height: 88px; }
         .company-table th:first-child,
