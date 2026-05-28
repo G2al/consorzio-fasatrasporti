@@ -455,7 +455,7 @@ class CompanyDocumentOverviewReport
     private function reviewUrl(UploadedDocument $document): string
     {
         return DocumentApprovalResource::getUrl('index', [
-            'activeTab' => $document->template->section?->slug ?: 'societa',
+            'tab' => $document->template->section?->slug ?: 'societa',
             'tableAction' => 'review',
             'tableActionRecord' => (string) $document->getKey(),
         ]);

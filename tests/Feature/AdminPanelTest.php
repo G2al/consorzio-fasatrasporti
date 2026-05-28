@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\DocumentTemplate;
+use App\Models\Employee;
 use App\Models\UploadedDocument;
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Services\MissingDocumentsReportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -459,14 +461,49 @@ class AdminPanelTest extends TestCase
             'approved_at' => now(),
         ]);
 
-        $template = DocumentTemplate::query()
+        $companyTemplate = DocumentTemplate::query()
             ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        $employeeTemplate = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'dipendenti'))
+            ->firstOrFail();
+
+        $vehicleTemplate = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'veicoli'))
             ->firstOrFail();
 
         Storage::disk('public')->put('uploaded-documents/panoramica/direct-review.pdf', 'PDF test');
 
-        $document = $company->documents()->create([
-            'template_id' => $template->id,
+        $companyDocument = $company->documents()->create([
+            'template_id' => $companyTemplate->id,
+            'file_path' => 'uploaded-documents/panoramica/direct-review.pdf',
+            'status' => 'pending',
+            'has_expiry' => false,
+        ]);
+
+        $employee = Employee::query()->create([
+            'user_id' => $company->id,
+            'first_name' => 'Mario',
+            'last_name' => 'Rossi',
+            'tax_code' => 'RSSMRA80A01H501U',
+        ]);
+
+        $employeeDocument = $employee->documents()->create([
+            'template_id' => $employeeTemplate->id,
+            'file_path' => 'uploaded-documents/panoramica/direct-review.pdf',
+            'status' => 'pending',
+            'has_expiry' => false,
+        ]);
+
+        $vehicle = Vehicle::query()->create([
+            'user_id' => $company->id,
+            'brand_model' => 'Iveco Daily',
+            'plate' => 'AB123CD',
+        ]);
+
+        $vehicleDocument = $vehicle->documents()->create([
+            'template_id' => $vehicleTemplate->id,
             'file_path' => 'uploaded-documents/panoramica/direct-review.pdf',
             'status' => 'pending',
             'has_expiry' => false,
@@ -476,9 +513,13 @@ class AdminPanelTest extends TestCase
             ->get('/admin/users/'.$company->id.'/documenti')
             ->assertOk()
             ->assertSee('document-approvals', false)
-            ->assertSee('activeTab=societa', false)
+            ->assertSee('tab=societa', false)
             ->assertSee('tableAction=review', false)
-            ->assertSee('tableActionRecord='.$document->id, false);
+            ->assertSee('tableActionRecord='.$companyDocument->id, false)
+            ->assertSee('tab=dipendenti', false)
+            ->assertSee('tableActionRecord='.$employeeDocument->id, false)
+            ->assertSee('tab=veicoli', false)
+            ->assertSee('tableActionRecord='.$vehicleDocument->id, false);
     }
 
     public function test_admin_can_download_filtered_company_overview_pdf(): void
