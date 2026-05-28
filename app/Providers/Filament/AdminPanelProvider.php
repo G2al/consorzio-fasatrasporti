@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -35,6 +36,8 @@ class AdminPanelProvider extends PanelProvider
             ->favicon(asset('images/favicon_consorzio.png'))
             ->brandLogo(asset('images/logo_consorzio_white_trimmed.png'))
             ->brandLogoHeight('5rem')
+            ->defaultThemeMode(ThemeMode::Dark)
+            ->darkMode(true, isForced: true)
             ->colors([
                 'primary' => Color::Amber,
             ])
