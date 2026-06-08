@@ -8,8 +8,10 @@ use App\Models\Employee;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\CompanyCredentialsMailService;
 use App\Services\MissingDocumentsReportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -290,6 +292,108 @@ class AdminPanelTest extends TestCase
                 && $mail->sectionLabel === 'Societa'
                 && count($mail->items) > 0;
         });
+    }
+
+    public function test_manual_credentials_mail_service_sends_mass_emails_from_json(): void
+    {
+        $this->seed();
+        Mail::fake();
+
+        User::query()->create([
+            'name' => 'G2A Luigi SRL',
+            'email' => 'g2aluigi@gmail.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $path = storage_path('app/testing/company-credentials-test.json');
+        File::ensureDirectoryExists(dirname($path));
+        File::put($path, json_encode([
+            [
+                'email' => 'g2aluigi@gmail.com',
+                'password' => 'password',
+            ],
+            [
+                'email' => 'esterno@example.com',
+                'password' => 'PasswordTemporanea1',
+            ],
+            [
+                'email' => 'senza-password@example.com',
+                'password' => '',
+            ],
+            [
+                'email' => 'g2aluigi@gmail.com',
+                'password' => 'duplicata',
+            ],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        config(['services.companies.credentials_json_path' => $path]);
+
+        $result = app(CompanyCredentialsMailService::class)->sendManual();
+
+        $this->assertSame([
+            'total' => 4,
+            'sent' => 2,
+            'skipped' => 2,
+            'matched' => 1,
+            'unmatched' => 1,
+        ], $result);
+
+        Mail::assertSent(\App\Mail\CompanyCredentialsMail::class, 2);
+        Mail::assertSent(\App\Mail\CompanyCredentialsMail::class, function ($mail): bool {
+            return $mail->hasTo('g2aluigi@gmail.com')
+                && $mail->loginEmail === 'g2aluigi@gmail.com'
+                && $mail->loginPassword === 'password';
+        });
+
+        Mail::assertSent(\App\Mail\CompanyCredentialsMail::class, function ($mail): bool {
+            return $mail->hasTo('esterno@example.com')
+                && $mail->loginEmail === 'esterno@example.com'
+                && $mail->loginPassword === 'PasswordTemporanea1';
+        });
+
+        File::delete($path);
+    }
+
+    public function test_manual_credentials_mail_service_can_filter_selected_emails(): void
+    {
+        $this->seed();
+        Mail::fake();
+
+        $path = storage_path('app/testing/company-credentials-selected-test.json');
+        File::ensureDirectoryExists(dirname($path));
+        File::put($path, json_encode([
+            [
+                'email' => 'prima@example.com',
+                'password' => 'Prima123',
+            ],
+            [
+                'email' => 'seconda@example.com',
+                'password' => 'Seconda123',
+            ],
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        config(['services.companies.credentials_json_path' => $path]);
+
+        $result = app(CompanyCredentialsMailService::class)->sendManual(['seconda@example.com']);
+
+        $this->assertSame([
+            'total' => 2,
+            'sent' => 1,
+            'skipped' => 0,
+            'matched' => 0,
+            'unmatched' => 1,
+        ], $result);
+
+        Mail::assertSent(\App\Mail\CompanyCredentialsMail::class, 1);
+        Mail::assertSent(\App\Mail\CompanyCredentialsMail::class, function ($mail): bool {
+            return $mail->hasTo('seconda@example.com')
+                && $mail->loginPassword === 'Seconda123';
+        });
+
+        File::delete($path);
     }
 
     public function test_admin_can_open_template_companies_page(): void

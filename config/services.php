@@ -54,4 +54,8 @@ return [
         'deadline_reminder_days' => env('DEADLINE_REMINDER_DAYS', '30,15'),
     ],
 
+    'companies' => [
+        'credentials_json_path' => env('COMPANY_CREDENTIALS_JSON_PATH', storage_path('app/manual/company-credentials.json')),
+    ],
+
 ];

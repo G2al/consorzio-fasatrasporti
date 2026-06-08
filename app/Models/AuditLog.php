@@ -51,6 +51,7 @@ class AuditLog extends Model
             'company.registered' => 'Societa registrata',
             'company.profile_updated' => 'Profilo societa aggiornato',
             'company.password_updated' => 'Password aggiornata',
+            'company.credentials_emailed' => 'Credenziali inviate',
             'employee.created' => 'Dipendente creato',
             'employee.updated' => 'Dipendente aggiornato',
             'employee.deleted' => 'Dipendente eliminato',
