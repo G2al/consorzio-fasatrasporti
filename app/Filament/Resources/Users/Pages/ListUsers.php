@@ -30,12 +30,8 @@ class ListUsers extends ListRecords
                 ->color('warning')
                 ->visible(fn (): bool => auth('admin')->user()?->role === 'admin')
                 ->requiresConfirmation()
-                ->modalHeading('Inviare le credenziali dal file JSON?')
-                ->modalDescription(function (): string {
-                    $path = app(CompanyCredentialsMailService::class)->configuredPath();
-
-                    return 'Seleziona le societa a cui inviare le credenziali leggendo il file: '.$path;
-                })
+                ->modalHeading('Inviare le credenziali alle societa selezionate?')
+                ->modalDescription('Le societa selezionate riceveranno le credenziali di accesso tramite email.')
                 ->form([
                     CheckboxList::make('emails')
                         ->label('Societa da contattare')
@@ -44,7 +40,7 @@ class ListUsers extends ListRecords
                         ->columns(2)
                         ->bulkToggleable()
                         ->required()
-                        ->helperText('Vengono mostrate le email presenti nel JSON. Puoi inviare anche a indirizzi non ancora collegati a una societa registrata.'),
+                        ->helperText('Questo elenco proviene da un file fisso preparato manualmente. Se viene aggiunta una societa oppure cambiano email o password, e necessario contattare il programmatore per aggiornare i dati.'),
                 ])
                 ->action(function (array $data): void {
                     try {
