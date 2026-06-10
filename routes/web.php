@@ -27,6 +27,8 @@ Route::middleware('auth:admin')
             ->name('templates.show');
         Route::get('/templates/{template}/pdf', [DocumentDownloadController::class, 'templatePdf'])
             ->name('templates.pdf');
+        Route::get('/templates/{template}/pdf/missing', [DocumentDownloadController::class, 'templateMissingPdf'])
+            ->name('templates.missing-pdf');
     });
 
 Route::middleware('auth:admin')

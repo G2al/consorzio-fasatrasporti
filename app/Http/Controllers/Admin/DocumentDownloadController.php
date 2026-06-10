@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Support\CompanyDocumentOverviewReport;
 use App\Support\SimplePdf;
+use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -102,12 +103,7 @@ class DocumentDownloadController extends Controller
 
     public function template(DocumentTemplate $template): BinaryFileResponse
     {
-        $documents = UploadedDocument::query()
-            ->where('template_id', $template->id)
-            ->where('status', 'approved')
-            ->with(['template.section', 'subtemplate', 'documentable'])
-            ->latest('approved_at')
-            ->get();
+        $documents = $this->latestApprovedTemplateDocuments($template);
 
         return $this->zipResponse(
             $documents,
@@ -119,19 +115,41 @@ class DocumentDownloadController extends Controller
 
     public function templatePdf(DocumentTemplate $template): Response
     {
-        $documents = UploadedDocument::query()
-            ->where('template_id', $template->id)
-            ->where('status', 'approved')
-            ->with(['template.section', 'subtemplate', 'documentable'])
-            ->latest('approved_at')
-            ->get();
+        $documents = $this->latestApprovedTemplateDocuments($template);
 
         return $this->pdfResponse(
             'Riepilogo approvati - '.$template->name,
-            ['Societa', 'Documento', 'Scadenza'],
+            ['Societa', 'Documento', 'Stato', 'Scadenza'],
             $this->templateDocumentReportRows($documents),
             'riepilogo-approvati-'.$this->slug($template->name).'.pdf',
         );
+    }
+
+    public function templateMissingPdf(DocumentTemplate $template): Response
+    {
+        return $this->pdfResponse(
+            'Riepilogo mancanti - '.$template->name,
+            ['Societa', 'Responsabile', 'Email', 'Stato'],
+            $this->templateMissingCompanyRows($template),
+            'riepilogo-mancanti-'.$this->slug($template->name).'.pdf',
+        );
+    }
+
+    /**
+     * @return Collection<int, UploadedDocument>
+     */
+    private function latestApprovedTemplateDocuments(DocumentTemplate $template): Collection
+    {
+        return UploadedDocument::query()
+            ->where('template_id', $template->id)
+            ->where('status', 'approved')
+            ->whereNull('parent_uploaded_document_id')
+            ->with(['template.section', 'subtemplate', 'documentable'])
+            ->get()
+            ->sortByDesc(fn (UploadedDocument $document): int => $document->approved_at?->getTimestamp() ?? $document->updated_at?->getTimestamp() ?? 0)
+            ->groupBy(fn (UploadedDocument $document): string => $this->templateCompanyGroupingKey($document))
+            ->map(fn (Collection $documents): UploadedDocument => $documents->first())
+            ->values();
     }
 
     private function companyDocumentsQuery(User $company, string $scope): Builder
@@ -245,19 +263,117 @@ class DocumentDownloadController extends Controller
         foreach ($documents as $document) {
             $company = $document->companyUser()?->name ?: 'Societa non disponibile';
             $expiry = $document->expiry_date?->format('d/m/Y') ?: '-';
+            $status = $document->isExpired() ? 'Scaduto' : 'Approvato';
 
             if ($document->internal_expiry_date) {
                 $expiry .= ' | '.($document->internal_expiry_name ?: 'Requisito interno').': '.$document->internal_expiry_date->format('d/m/Y');
             }
 
+            if ($document->isExpired()) {
+                $expiry = $expiry !== '-'
+                    ? 'Scaduto il '.$expiry
+                    : 'Scaduto';
+            }
+
             $rows[] = [
                 $company,
                 $this->documentName($document),
+                $status,
                 $expiry,
             ];
         }
 
         return $rows;
+    }
+
+    private function templateCompanyGroupingKey(UploadedDocument $document): string
+    {
+        $company = $document->companyUser();
+
+        return $company
+            ? 'company:'.$company->getKey()
+            : $document->documentable_type.':'.$document->documentable_id;
+    }
+
+    /**
+     * @return array<int, array<int, string>>
+     */
+    private function templateMissingCompanyRows(DocumentTemplate $template): array
+    {
+        $companies = User::query()
+            ->where('role', 'company')
+            ->whereNotExists($this->templateDocumentExistsSubquery($template))
+            ->whereNotExists($this->templateExemptionExistsSubquery($template))
+            ->orderBy('name')
+            ->get(['name', 'responsible_name', 'email']);
+
+        return $companies
+            ->map(fn (User $company): array => [
+                $company->name,
+                $company->responsible_name ?: '-',
+                $company->email ?: '-',
+                'Mancante',
+            ])
+            ->all();
+    }
+
+    private function templateDocumentExistsSubquery(DocumentTemplate $template): Builder
+    {
+        $sectionSlug = $template->section?->slug;
+
+        return UploadedDocument::query()
+            ->selectRaw('1')
+            ->where('template_id', $template->id)
+            ->whereNull('parent_uploaded_document_id')
+            ->where(function (Builder $query) use ($sectionSlug): void {
+                match ($sectionSlug) {
+                    'dipendenti' => $query
+                        ->where('documentable_type', Employee::class)
+                        ->whereExists(Employee::query()
+                            ->selectRaw('1')
+                            ->whereColumn('employees.id', 'uploaded_documents.documentable_id')
+                            ->whereColumn('employees.user_id', 'users.id')),
+                    'veicoli' => $query
+                        ->where('documentable_type', Vehicle::class)
+                        ->whereExists(Vehicle::query()
+                            ->selectRaw('1')
+                            ->whereColumn('vehicles.id', 'uploaded_documents.documentable_id')
+                            ->whereColumn('vehicles.user_id', 'users.id')),
+                    default => $query
+                        ->where('documentable_type', User::class)
+                        ->whereColumn('documentable_id', 'users.id'),
+                };
+            })
+            ->limit(1);
+    }
+
+    private function templateExemptionExistsSubquery(DocumentTemplate $template): Builder
+    {
+        $sectionSlug = $template->section?->slug;
+
+        return \App\Models\DocumentExemption::query()
+            ->selectRaw('1')
+            ->where('template_id', $template->id)
+            ->where(function (Builder $query) use ($sectionSlug): void {
+                match ($sectionSlug) {
+                    'dipendenti' => $query
+                        ->where('exemptable_type', Employee::class)
+                        ->whereExists(Employee::query()
+                            ->selectRaw('1')
+                            ->whereColumn('employees.id', 'document_exemptions.exemptable_id')
+                            ->whereColumn('employees.user_id', 'users.id')),
+                    'veicoli' => $query
+                        ->where('exemptable_type', Vehicle::class)
+                        ->whereExists(Vehicle::query()
+                            ->selectRaw('1')
+                            ->whereColumn('vehicles.id', 'document_exemptions.exemptable_id')
+                            ->whereColumn('vehicles.user_id', 'users.id')),
+                    default => $query
+                        ->where('exemptable_type', User::class)
+                        ->whereColumn('exemptable_id', 'users.id'),
+                };
+            })
+            ->limit(1);
     }
 
     private function pdfResponse(string $title, array $columns, array $rows, string $downloadName): Response

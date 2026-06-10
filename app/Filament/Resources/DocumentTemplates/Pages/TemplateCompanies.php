@@ -9,6 +9,7 @@ use App\Models\UploadedDocument;
 use App\Models\User;
 use App\Models\Vehicle;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Resources\Concerns\HasTabs;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
@@ -63,12 +64,24 @@ class TemplateCompanies extends Page implements HasTable
                 ->color('gray')
                 ->url(fn (): string => route('admin.downloads.templates.show', $this->record))
                 ->openUrlInNewTab(),
-            Action::make('downloadApprovedPdf')
-                ->label('PDF approvati')
+            ActionGroup::make([
+                Action::make('downloadApprovedPdf')
+                    ->label('PDF approvati')
+                    ->icon(Heroicon::OutlinedDocumentText)
+                    ->color('gray')
+                    ->url(fn (): string => route('admin.downloads.templates.pdf', $this->record))
+                    ->openUrlInNewTab(),
+                Action::make('downloadMissingPdf')
+                    ->label('PDF mancanti')
+                    ->icon(Heroicon::OutlinedExclamationTriangle)
+                    ->color('gray')
+                    ->url(fn (): string => route('admin.downloads.templates.missing-pdf', $this->record))
+                    ->openUrlInNewTab(),
+            ])
+                ->label('PDF')
                 ->icon(Heroicon::OutlinedDocumentText)
-                ->color('gray')
-                ->url(fn (): string => route('admin.downloads.templates.pdf', $this->record))
-                ->openUrlInNewTab(),
+                ->button()
+                ->color('gray'),
         ];
     }
 

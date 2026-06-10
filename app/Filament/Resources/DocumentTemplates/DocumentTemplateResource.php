@@ -10,6 +10,7 @@ use App\Models\DocumentTemplate;
 use App\Models\DocumentCategory;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -122,12 +123,24 @@ class DocumentTemplateResource extends Resource
                     ->color('gray')
                     ->url(fn (DocumentTemplate $record): string => route('admin.downloads.templates.show', $record))
                     ->openUrlInNewTab(),
-                Action::make('downloadApprovedPdf')
-                    ->label('PDF approvati')
+                ActionGroup::make([
+                    Action::make('downloadApprovedPdf')
+                        ->label('PDF approvati')
+                        ->icon(Heroicon::OutlinedDocumentText)
+                        ->color('gray')
+                        ->url(fn (DocumentTemplate $record): string => route('admin.downloads.templates.pdf', $record))
+                        ->openUrlInNewTab(),
+                    Action::make('downloadMissingPdf')
+                        ->label('PDF mancanti')
+                        ->icon(Heroicon::OutlinedExclamationTriangle)
+                        ->color('gray')
+                        ->url(fn (DocumentTemplate $record): string => route('admin.downloads.templates.missing-pdf', $record))
+                        ->openUrlInNewTab(),
+                ])
+                    ->label('PDF')
                     ->icon(Heroicon::OutlinedDocumentText)
-                    ->color('gray')
-                    ->url(fn (DocumentTemplate $record): string => route('admin.downloads.templates.pdf', $record))
-                    ->openUrlInNewTab(),
+                    ->button()
+                    ->color('gray'),
                 DeleteAction::make(),
             ])
             ->toolbarActions([

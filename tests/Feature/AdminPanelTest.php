@@ -266,6 +266,119 @@ class AdminPanelTest extends TestCase
         UploadedDocument::query()->whereKey($document->id)->delete();
     }
 
+    public function test_template_pdf_shows_only_latest_approved_document_per_company_and_marks_it_expired(): void
+    {
+        $this->seed();
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $company = User::query()->create([
+            'name' => 'Duplicato Test SRL',
+            'email' => 'duplicato-test@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->where('name', 'DURC')
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/duplicato-test/old-durc.pdf',
+            'status' => 'approved',
+            'has_expiry' => true,
+            'expiry_date' => now()->addDays(30),
+            'approved_at' => now()->subDays(30),
+            'created_at' => now()->subDays(30),
+            'updated_at' => now()->subDays(30),
+        ]);
+
+        $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/duplicato-test/new-durc.pdf',
+            'status' => 'approved',
+            'has_expiry' => true,
+            'expiry_date' => now()->subDay(),
+            'approved_at' => now()->subDay(),
+            'created_at' => now()->subDay(),
+            'updated_at' => now()->subDay(),
+        ]);
+
+        $response = $this->actingAs($admin, 'admin')
+            ->get(route('admin.downloads.templates.pdf', $template));
+
+        $response
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $content = $response->getContent();
+
+        $this->assertIsString($content);
+        $this->assertSame(1, substr_count($content, 'Duplicato Test SRL'));
+        $this->assertStringContainsString('Scaduto', $content);
+        $this->assertStringNotContainsString('Approvato', $content);
+    }
+
+    public function test_template_missing_pdf_lists_only_companies_without_the_document(): void
+    {
+        $this->seed();
+
+        $admin = User::query()
+            ->where('email', 'admin@admin.com')
+            ->firstOrFail();
+
+        $companyWithDocument = User::query()->create([
+            'name' => 'Societa Presente SRL',
+            'email' => 'societa-presente@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $missingCompany = User::query()->create([
+            'name' => 'Societa Mancante PDF SRL',
+            'email' => 'societa-mancante-pdf@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->where('name', 'DURC')
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        $companyWithDocument->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/missing-pdf/durc.pdf',
+            'status' => 'approved',
+            'has_expiry' => false,
+            'approved_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin, 'admin')
+            ->get(route('admin.downloads.templates.missing-pdf', $template));
+
+        $response
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $content = $response->getContent();
+
+        $this->assertIsString($content);
+        $this->assertStringContainsString($missingCompany->name, $content);
+        $this->assertStringContainsString('Mancante', $content);
+        $this->assertStringNotContainsString($companyWithDocument->name, $content);
+    }
+
     public function test_manual_missing_documents_report_sends_section_emails(): void
     {
         $this->seed();
