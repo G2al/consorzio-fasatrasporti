@@ -13,6 +13,7 @@ use App\Models\Vehicle;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
+use RuntimeException;
 
 class MissingDocumentsReportService
 {
@@ -21,6 +22,12 @@ class MissingDocumentsReportService
      */
     public function sendManual(User $company): array
     {
+        $recipient = mb_strtolower(trim((string) $company->email));
+
+        if ($recipient === '' || ! filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+            throw new RuntimeException('La societa non ha un indirizzo email valido.');
+        }
+
         $reports = $this->reports($company);
         $sent = [];
 
@@ -30,7 +37,7 @@ class MissingDocumentsReportService
                 continue;
             }
 
-            Mail::to($company->email)->send(new MissingDocumentsReportMail(
+            Mail::to($recipient)->send(new MissingDocumentsReportMail(
                 $company,
                 $report['label'],
                 $report['items'],

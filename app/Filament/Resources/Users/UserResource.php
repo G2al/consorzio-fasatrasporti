@@ -28,6 +28,8 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class UserResource extends Resource
 {
@@ -176,24 +178,38 @@ class UserResource extends Resource
                         ->modalHeading('Inviare riepilogo documenti mancanti?')
                         ->modalDescription('Verranno inviate fino a 3 email separate alla societa: societa, dipendenti e veicoli. Le sezioni senza mancanti non vengono inviate.')
                         ->action(function (User $record): void {
-                            $sent = app(MissingDocumentsReportService::class)->sendManual($record);
-                            $total = array_sum($sent);
+                            try {
+                                $sent = app(MissingDocumentsReportService::class)->sendManual($record);
+                                $total = array_sum($sent);
 
-                            if ($total === 0) {
+                                if ($total === 0) {
+                                    Notification::make()
+                                        ->title('Nessuna email inviata')
+                                        ->body('Non risultano documenti mancanti o scaduti per questa societa.')
+                                        ->info()
+                                        ->send();
+
+                                    return;
+                                }
+
                                 Notification::make()
-                                    ->title('Nessuna email inviata')
-                                    ->body('Non risultano documenti mancanti o scaduti per questa societa.')
-                                    ->info()
+                                    ->title('Email riepilogo inviate')
+                                    ->body('Inclusi '.$total.' documenti: societa '.$sent['societa'].', dipendenti '.$sent['dipendenti'].', veicoli '.$sent['veicoli'].'.')
+                                    ->success()
                                     ->send();
+                            } catch (Throwable $exception) {
+                                Log::error('Invio email mancanti non riuscito.', [
+                                    'company_id' => $record->id,
+                                    'company_email' => $record->email,
+                                    'message' => $exception->getMessage(),
+                                ]);
 
-                                return;
+                                Notification::make()
+                                    ->title('Invio email non riuscito')
+                                    ->body('Controlla configurazione mail, indirizzo della societa e log del server.')
+                                    ->danger()
+                                    ->send();
                             }
-
-                            Notification::make()
-                                ->title('Email riepilogo inviate')
-                                ->body('Inclusi '.$total.' documenti: societa '.$sent['societa'].', dipendenti '.$sent['dipendenti'].', veicoli '.$sent['veicoli'].'.')
-                                ->success()
-                                ->send();
                         }),
                 ])
                     ->label('Documenti')
