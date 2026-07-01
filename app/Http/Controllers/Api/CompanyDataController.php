@@ -96,7 +96,8 @@ class CompanyDataController extends Controller
         $pending = $documentRows->where('status', 'pending')->count();
         $rejected = $documentRows->where('status', 'rejected')->count();
         $expired = $documentRows->where('status', 'expired')->count();
-        $uploaded = $documentRows->filter(fn (array $row): bool => $row['document'] instanceof UploadedDocument && $row['status'] !== 'expired')->count();
+        $uploaded = $documentRows->filter(fn (array $row): bool => $row['document'] instanceof UploadedDocument
+            && ! in_array($row['status'], ['missing', 'expired'], true))->count();
         $missing = $documentRows->whereIn('status', ['missing', 'expired'])->count();
         $today = now()->startOfDay();
         $expiryLimit = now()->addDays(60)->endOfDay();

@@ -302,6 +302,56 @@ class CompanyApiTest extends TestCase
         $this->assertSame(2, $company->documents()->where('template_id', $template->id)->count());
     }
 
+    public function test_rejected_document_is_exposed_as_missing_and_counted_as_missing(): void
+    {
+        $this->seed();
+        Storage::fake('public');
+
+        $this->postJson('/api/register', [
+            'name' => 'Respinto Demo SRL',
+            'responsible_name' => 'Mario Rossi',
+            'vat_number' => '12121212121',
+            'email' => 'respinto@example.com',
+            'password' => 'Password1',
+            'password_confirmation' => 'Password1',
+        ])->assertCreated();
+
+        $token = $this->approveAndLogin('respinto@example.com');
+        $company = User::query()->where('email', 'respinto@example.com')->firstOrFail();
+        $template = DocumentTemplate::query()
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        Storage::disk('public')->put('uploaded-documents/respinto/documento.pdf', 'rejected');
+
+        $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/respinto/documento.pdf',
+            'status' => 'rejected',
+            'has_expiry' => false,
+            'admin_notes' => 'Documento non conforme.',
+        ]);
+
+        $documents = $this->withToken($token)
+            ->getJson('/api/company/documents')
+            ->assertOk()
+            ->json('documents');
+
+        $document = collect($documents)
+            ->firstWhere('template.id', $template->id);
+
+        $this->assertSame('missing', $document['status']);
+        $this->assertSame('missing', $document['uploaded_document']['effective_status']);
+
+        $dashboard = $this->withToken($token)
+            ->getJson('/api/dashboard')
+            ->assertOk()
+            ->assertJsonPath('summary.rejected', 0)
+            ->assertJsonPath('summary.uploaded', 0);
+
+        $this->assertGreaterThan(0, $dashboard->json('summary.missing'));
+    }
+
     public function test_company_can_upload_multiple_integrations_for_approved_document(): void
     {
         $this->seed();

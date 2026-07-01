@@ -115,6 +115,10 @@ class UploadedDocument extends Model
 
     public function effectiveStatus(): string
     {
+        if ($this->status === 'rejected') {
+            return 'missing';
+        }
+
         return $this->isExpired() ? 'expired' : $this->status;
     }
 
