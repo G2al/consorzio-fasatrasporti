@@ -167,12 +167,16 @@ class DocumentApprovalResource extends Resource
                         'approved' => 'Approvato',
                         'expired' => 'Scaduto',
                         'rejected' => 'Respinto',
+                        'missing' => 'Mancante',
+                        'pending' => 'In attesa',
                         default => 'In attesa',
                     })
                     ->color(fn (string $state): string => match ($state) {
                         'approved' => 'success',
                         'expired' => 'danger',
                         'rejected' => 'danger',
+                        'missing' => 'danger',
+                        'pending' => 'warning',
                         default => 'warning',
                     }),
                 TextColumn::make('expiry_date')
@@ -370,8 +374,10 @@ class DocumentApprovalResource extends Resource
                         'review_section' => $record->template->section?->name,
                         'review_template' => static::documentName($record),
                         'review_owner' => static::documentableLabel($record),
-                        'review_status' => match ($record->status) {
+                        'review_status' => match ($record->effectiveStatus()) {
                             'approved' => 'Approvato',
+                            'missing' => 'Mancante',
+                            'expired' => 'Scaduto',
                             'rejected' => 'Respinto',
                             default => 'In attesa',
                         },
