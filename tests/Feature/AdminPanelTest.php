@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\CompanyCredentialsMailService;
 use App\Services\MissingDocumentsReportService;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
@@ -402,6 +403,29 @@ class AdminPanelTest extends TestCase
         Mail::assertSent(\App\Mail\MissingDocumentsReportMail::class, 1);
         Mail::assertSent(\App\Mail\MissingDocumentsReportMail::class, function ($mail): bool {
             return $mail->hasTo('missing@example.com')
+                && $mail->sectionLabel === 'Societa'
+                && count($mail->items) > 0;
+        });
+    }
+
+    public function test_scheduled_missing_documents_command_sends_emails_for_companies_with_missing_documents(): void
+    {
+        $this->seed();
+        Mail::fake();
+
+        User::query()->create([
+            'name' => 'Automazione Mancanti SRL',
+            'email' => 'automazione-mancanti@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        Artisan::call('documents:send-missing-emails');
+
+        Mail::assertSent(\App\Mail\MissingDocumentsReportMail::class, function ($mail): bool {
+            return $mail->hasTo('automazione-mancanti@example.com')
                 && $mail->sectionLabel === 'Societa'
                 && count($mail->items) > 0;
         });

@@ -11,3 +11,8 @@ Artisan::command('inspire', function () {
 Schedule::command('documents:notify-deadlines')
     ->everySecond()
     ->withoutOverlapping();
+
+Schedule::command('documents:send-missing-emails')
+    ->weeklyOn(2, '08:00')
+    ->timezone('Europe/Rome')
+    ->withoutOverlapping();
