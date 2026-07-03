@@ -16,6 +16,8 @@ use Throwable;
 
 class NotifyDocumentDeadlines extends Command
 {
+    private const TELEGRAM_MESSAGE_SAFE_LIMIT = 3500;
+
     protected $signature = 'documents:notify-deadlines {--dry-run : Mostra le scadenze senza inviare Telegram}';
 
     protected $description = 'Invia su Telegram gli avvisi per le scadenze dei documenti.';
@@ -36,8 +38,10 @@ class NotifyDocumentDeadlines extends Command
             return self::SUCCESS;
         }
 
-        if (! $this->sendTelegramMessage($this->telegramMessage($items))) {
-            return self::FAILURE;
+        foreach ($this->telegramMessages($items) as $message) {
+            if (! $this->sendTelegramMessage($message)) {
+                return self::FAILURE;
+            }
         }
 
         $now = now();
@@ -165,40 +169,74 @@ class NotifyDocumentDeadlines extends Command
             ->exists();
     }
 
-    private function telegramMessage(Collection $items): string
+    private function telegramMessages(Collection $items): Collection
     {
-        $groups = [
+        return collect($this->bucketTitles())
+            ->flatMap(function (string $title, string $bucket) use ($items): array {
+                $bucketItems = $items->where('bucket', $bucket)->values();
+
+                if ($bucketItems->isEmpty()) {
+                    return [];
+                }
+
+                return $this->telegramMessagesForBucket($bucket, $title, $bucketItems)->all();
+            })
+            ->values();
+    }
+
+    private function telegramMessagesForBucket(string $bucket, string $title, Collection $items): Collection
+    {
+        $headerLines = [
+            '⏰ <b>Scadenze documenti</b>',
+            '<i>Promemoria automatico documenti approvati</i>',
+            '',
+            $this->bucketIcon($bucket).' <b>'.$title.'</b>',
+        ];
+
+        $messages = collect();
+        $currentLines = $headerLines;
+
+        foreach ($items as $item) {
+            $itemText = $this->itemLine($item);
+            $candidateMessage = implode("\n", [...$currentLines, $itemText]);
+
+            if (
+                mb_strlen($candidateMessage) > self::TELEGRAM_MESSAGE_SAFE_LIMIT
+                && count($currentLines) > count($headerLines)
+            ) {
+                $messages->push(implode("\n", $currentLines));
+                $currentLines = $headerLines;
+            }
+
+            $currentLines[] = $itemText;
+        }
+
+        if (count($currentLines) > count($headerLines)) {
+            $messages->push(implode("\n", $currentLines));
+        }
+
+        if ($messages->count() <= 1) {
+            return $messages;
+        }
+
+        return $messages->values()->map(function (string $message, int $index) use ($messages): string {
+            return preg_replace(
+                '/(<b>.*?<\/b>)/',
+                '$1 <i>(' . ($index + 1) . '/' . $messages->count() . ')</i>',
+                $message,
+                1,
+            ) ?? $message;
+        });
+    }
+
+    private function bucketTitles(): array
+    {
+        return [
             'expired' => 'Scaduti',
             '1' => 'Entro 1 giorno',
             '15' => 'Entro 15 giorni',
             '30' => 'Entro 30 giorni',
         ];
-
-        $lines = [
-            '⏰ <b>Scadenze documenti</b>',
-            '<i>Promemoria automatico documenti approvati</i>',
-        ];
-
-        foreach ($groups as $bucket => $title) {
-            $bucketItems = $items->where('bucket', $bucket);
-
-            if ($bucketItems->isEmpty()) {
-                continue;
-            }
-
-            $lines[] = '';
-            $lines[] = $this->bucketIcon($bucket).' <b>'.$title.'</b>';
-
-            $bucketItems->take(25)->each(function (array $item) use (&$lines): void {
-                $lines[] = $this->itemLine($item);
-            });
-
-            if ($bucketItems->count() > 25) {
-                $lines[] = '...altre '.($bucketItems->count() - 25).' scadenze';
-            }
-        }
-
-        return implode("\n", $lines);
     }
 
     private function itemLine(array $item): string
