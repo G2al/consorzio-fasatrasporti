@@ -9,7 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('documents:notify-deadlines')
-    ->everySecond()
+    ->everyTenMinutes()
     ->withoutOverlapping();
 
 Schedule::command('documents:send-missing-emails')
