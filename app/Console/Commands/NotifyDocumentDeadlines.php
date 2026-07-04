@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\UploadedDocument;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\DeadlineReminderMailService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -22,50 +23,76 @@ class NotifyDocumentDeadlines extends Command
 
     protected $description = 'Invia su Telegram gli avvisi per le scadenze dei documenti.';
 
-    public function handle(): int
+    public function handle(DeadlineReminderMailService $deadlineReminderMailService): int
     {
-        $items = $this->pendingDeadlineItems();
+        $items = $this->deadlineItems();
+        $telegramItems = $this->pendingDeadlineItems($items, 'telegram');
+        $emailItems = $this->pendingEmailDeadlineItems($items);
 
-        if ($items->isEmpty()) {
+        if ($telegramItems->isEmpty() && $emailItems->isEmpty()) {
             $this->info('Nessuna scadenza da notificare.');
 
             return self::SUCCESS;
         }
 
         if ($this->option('dry-run')) {
-            $items->each(fn (array $item) => $this->line($this->itemLine($item)));
+            $this->line('[Telegram] '.$telegramItems->count().' scadenze da inviare');
+            $telegramItems->each(fn (array $item) => $this->line($this->itemLine($item)));
+
+            $this->newLine();
+            $this->line('[Email] '.$emailItems->count().' scadenze da inviare');
+            $emailItems->each(fn (array $item) => $this->line($this->itemLine($item)));
 
             return self::SUCCESS;
         }
 
-        foreach ($this->telegramMessages($items) as $message) {
-            if (! $this->sendTelegramMessage($message)) {
-                return self::FAILURE;
+        $now = now();
+
+        if ($telegramItems->isNotEmpty()) {
+            foreach ($this->telegramMessages($telegramItems) as $chunk) {
+                if (! $this->sendTelegramMessage($chunk['message'])) {
+                    return self::FAILURE;
+                }
+
+                $this->markAsSent($chunk['items'], 'telegram', $now);
             }
         }
 
-        $now = now();
-        $items->each(function (array $item) use ($now): void {
-            DocumentDeadlineNotification::query()->firstOrCreate(
-                [
-                    'uploaded_document_id' => $item['document']->id,
-                    'channel' => 'telegram',
-                    'deadline_type' => $item['deadline_type'],
-                    'bucket' => $item['bucket'],
-                    'deadline_date' => $item['deadline_date']->toDateString(),
-                ],
-                [
-                    'sent_at' => $now,
-                ],
-            );
-        });
+        $failedEmails = 0;
+        $sentCompanies = 0;
 
-        $this->info('Notifica Telegram inviata per '.$items->count().' scadenze.');
+        $emailItems
+            ->groupBy(fn (array $item): int => $item['company_user']->id)
+            ->each(function (Collection $companyItems) use ($deadlineReminderMailService, $now, &$failedEmails, &$sentCompanies): void {
+                $company = $companyItems->first()['company_user'];
 
-        return self::SUCCESS;
+                try {
+                    $deadlineReminderMailService->send($company, $companyItems);
+                    $this->markAsSent($companyItems, 'email', $now);
+                    $sentCompanies++;
+                } catch (Throwable $exception) {
+                    $failedEmails++;
+
+                    Log::error('Invio email scadenze non riuscito.', [
+                        'company_id' => $company->id,
+                        'company_email' => $company->email,
+                        'message' => $exception->getMessage(),
+                    ]);
+
+                    $this->warn($company->name.': '.$exception->getMessage());
+                }
+            });
+
+        $this->info('Notifiche Telegram inviate per '.$telegramItems->count().' scadenze.');
+
+        if ($emailItems->isNotEmpty()) {
+            $this->info('Email scadenze inviate a '.$sentCompanies.' societa per '.$emailItems->count().' scadenze.');
+        }
+
+        return $failedEmails > 0 ? self::FAILURE : self::SUCCESS;
     }
 
-    private function pendingDeadlineItems(): Collection
+    private function deadlineItems(): Collection
     {
         $thresholds = $this->thresholds();
         $maxDays = max($thresholds);
@@ -88,8 +115,28 @@ class NotifyDocumentDeadlines extends Command
             ])
             ->get()
             ->flatMap(fn (UploadedDocument $document): array => $this->deadlineItemsForDocument($document, $thresholds, $today))
-            ->reject(fn (array $item): bool => $this->alreadySent($item))
             ->sortBy(fn (array $item): string => $item['sort'].'-'.$item['deadline_date']->toDateString().'-'.$item['company'])
+            ->values();
+    }
+
+    private function pendingDeadlineItems(Collection $items, string $channel): Collection
+    {
+        return $items
+            ->reject(fn (array $item): bool => $this->alreadySent($item, $channel))
+            ->values();
+    }
+
+    private function pendingEmailDeadlineItems(Collection $items): Collection
+    {
+        return $this->pendingDeadlineItems($items, 'email')
+            ->filter(function (array $item): bool {
+                $company = $item['company_user'];
+
+                return $item['days'] >= 0
+                    && $company instanceof User
+                    && filled($company->email)
+                    && filter_var($company->email, FILTER_VALIDATE_EMAIL);
+            })
             ->values();
     }
 
@@ -132,6 +179,7 @@ class NotifyDocumentDeadlines extends Command
             'deadline_date' => $date->copy()->startOfDay(),
             'days' => $days,
             'company' => $this->companyLabel($document),
+            'company_user' => $document->companyUser(),
             'owner' => $this->ownerLabel($document),
             'document_name' => $document->template->name,
             'sort' => match ($bucket) {
@@ -158,15 +206,33 @@ class NotifyDocumentDeadlines extends Command
         return null;
     }
 
-    private function alreadySent(array $item): bool
+    private function alreadySent(array $item, string $channel): bool
     {
         return DocumentDeadlineNotification::query()
             ->where('uploaded_document_id', $item['document']->id)
-            ->where('channel', 'telegram')
+            ->where('channel', $channel)
             ->where('deadline_type', $item['deadline_type'])
             ->where('bucket', $item['bucket'])
             ->whereDate('deadline_date', $item['deadline_date'])
             ->exists();
+    }
+
+    private function markAsSent(Collection $items, string $channel, Carbon $now): void
+    {
+        $items->each(function (array $item) use ($channel, $now): void {
+            DocumentDeadlineNotification::query()->firstOrCreate(
+                [
+                    'uploaded_document_id' => $item['document']->id,
+                    'channel' => $channel,
+                    'deadline_type' => $item['deadline_type'],
+                    'bucket' => $item['bucket'],
+                    'deadline_date' => $item['deadline_date']->toDateString(),
+                ],
+                [
+                    'sent_at' => $now,
+                ],
+            );
+        });
     }
 
     private function telegramMessages(Collection $items): Collection
@@ -195,6 +261,7 @@ class NotifyDocumentDeadlines extends Command
 
         $messages = collect();
         $currentLines = $headerLines;
+        $currentItems = collect();
 
         foreach ($items as $item) {
             $itemText = $this->itemLine($item);
@@ -204,28 +271,41 @@ class NotifyDocumentDeadlines extends Command
                 mb_strlen($candidateMessage) > self::TELEGRAM_MESSAGE_SAFE_LIMIT
                 && count($currentLines) > count($headerLines)
             ) {
-                $messages->push(implode("\n", $currentLines));
+                $messages->push([
+                    'message' => implode("\n", $currentLines),
+                    'items' => $currentItems->values(),
+                ]);
                 $currentLines = $headerLines;
+                $currentItems = collect();
             }
 
             $currentLines[] = $itemText;
+            $currentItems->push($item);
         }
 
         if (count($currentLines) > count($headerLines)) {
-            $messages->push(implode("\n", $currentLines));
+            $messages->push([
+                'message' => implode("\n", $currentLines),
+                'items' => $currentItems->values(),
+            ]);
         }
 
         if ($messages->count() <= 1) {
             return $messages;
         }
 
-        return $messages->values()->map(function (string $message, int $index) use ($messages): string {
-            return preg_replace(
+        return $messages->values()->map(function (array $chunk, int $index) use ($messages): array {
+            $message = preg_replace(
                 '/(<b>.*?<\/b>)/',
                 '$1 <i>(' . ($index + 1) . '/' . $messages->count() . ')</i>',
-                $message,
+                $chunk['message'],
                 1,
-            ) ?? $message;
+            ) ?? $chunk['message'];
+
+            return [
+                'message' => $message,
+                'items' => $chunk['items'],
+            ];
         });
     }
 

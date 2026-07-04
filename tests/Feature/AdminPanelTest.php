@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AuditLog;
+use App\Models\DocumentDeadlineNotification;
 use App\Models\DocumentTemplate;
 use App\Models\Employee;
 use App\Models\UploadedDocument;
@@ -13,6 +14,7 @@ use App\Services\MissingDocumentsReportService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -429,6 +431,67 @@ class AdminPanelTest extends TestCase
                 && $mail->sectionLabel === 'Societa'
                 && count($mail->items) > 0;
         });
+    }
+
+    public function test_deadline_notifications_command_sends_telegram_and_company_email_for_upcoming_deadlines(): void
+    {
+        $this->seed();
+        Mail::fake();
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        config([
+            'services.telegram.expiry_enabled' => true,
+            'services.telegram.expiry_bot_token' => 'token-test',
+            'services.telegram.expiry_chat_id' => '-100123',
+        ]);
+
+        $company = User::query()->create([
+            'name' => 'Scadenze Mail SRL',
+            'email' => 'scadenze-mail@example.com',
+            'password' => 'Password1',
+            'role' => 'company',
+            'approval_status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->where('name', 'DURC')
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        $company->documents()->create([
+            'template_id' => $template->id,
+            'file_path' => 'uploaded-documents/scadenze-mail/durc.pdf',
+            'status' => 'approved',
+            'has_expiry' => true,
+            'expiry_date' => now()->addDays(10),
+            'approved_at' => now(),
+        ]);
+
+        Artisan::call('documents:notify-deadlines');
+
+        Http::assertSentCount(1);
+
+        Mail::assertSent(\App\Mail\DeadlineReminderMail::class, function ($mail): bool {
+            return $mail->hasTo('scadenze-mail@example.com')
+                && count($mail->groups) === 1
+                && $mail->groups[0]['bucket'] === '15'
+                && count($mail->groups[0]['items']) === 1;
+        });
+
+        $this->assertDatabaseHas('document_deadline_notifications', [
+            'channel' => 'telegram',
+            'bucket' => '15',
+        ]);
+
+        $this->assertDatabaseHas('document_deadline_notifications', [
+            'channel' => 'email',
+            'bucket' => '15',
+        ]);
+
+        $this->assertSame(2, DocumentDeadlineNotification::query()->count());
     }
 
     public function test_manual_credentials_mail_service_sends_mass_emails_from_json(): void
