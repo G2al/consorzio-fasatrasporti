@@ -37,7 +37,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(asset('images/logo_consorzio_white_trimmed.png'))
             ->brandLogoHeight('5rem')
             ->defaultThemeMode(ThemeMode::Dark)
-            ->darkMode(true, isForced: true)
+            ->darkMode(true, isForced: false)
             ->colors([
                 'primary' => Color::Amber,
             ])
