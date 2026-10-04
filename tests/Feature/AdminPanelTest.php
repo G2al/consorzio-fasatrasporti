@@ -445,6 +445,10 @@ class AdminPanelTest extends TestCase
             'services.telegram.expiry_enabled' => true,
             'services.telegram.expiry_bot_token' => 'token-test',
             'services.telegram.expiry_chat_id' => '-100123',
+            'services.telegram.special_expiry_enabled' => true,
+            'services.telegram.special_expiry_bot_token' => 'token-special-test',
+            'services.telegram.special_expiry_chat_id' => '-100456',
+            'services.telegram.special_expiry_company_emails' => 'scadenze-mail@example.com',
         ]);
 
         $company = User::query()->create([
@@ -472,7 +476,11 @@ class AdminPanelTest extends TestCase
 
         Artisan::call('documents:notify-deadlines');
 
-        Http::assertSentCount(1);
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'bottoken-test/sendMessage')
+            && $request['chat_id'] === '-100123');
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'bottoken-special-test/sendMessage')
+            && $request['chat_id'] === '-100456');
 
         Mail::assertSent(\App\Mail\DeadlineReminderMail::class, function ($mail): bool {
             return $mail->hasTo('scadenze-mail@example.com')
@@ -491,7 +499,71 @@ class AdminPanelTest extends TestCase
             'bucket' => '15',
         ]);
 
-        $this->assertSame(2, DocumentDeadlineNotification::query()->count());
+        $this->assertDatabaseHas('document_deadline_notifications', [
+            'channel' => 'telegram_special',
+            'bucket' => '15',
+        ]);
+
+        $this->assertSame(3, DocumentDeadlineNotification::query()->count());
+    }
+
+    public function test_special_deadline_telegram_only_includes_configured_company_emails(): void
+    {
+        $this->seed();
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        config([
+            'services.telegram.special_expiry_enabled' => true,
+            'services.telegram.special_expiry_bot_token' => 'token-special-test',
+            'services.telegram.special_expiry_chat_id' => '-100456',
+            'services.telegram.special_expiry_company_emails' => 'inclusa@example.com',
+        ]);
+
+        $template = DocumentTemplate::query()
+            ->where('name', 'DURC')
+            ->whereHas('section', fn ($query) => $query->where('slug', 'societa'))
+            ->firstOrFail();
+
+        foreach ([
+            ['name' => 'Societa Inclusa SRL', 'email' => 'inclusa@example.com'],
+            ['name' => 'Societa Esclusa SRL', 'email' => 'esclusa@example.com'],
+        ] as $companyData) {
+            $company = User::query()->create([
+                ...$companyData,
+                'password' => 'Password1',
+                'role' => 'company',
+                'approval_status' => 'approved',
+                'approved_at' => now(),
+            ]);
+
+            $company->documents()->create([
+                'template_id' => $template->id,
+                'file_path' => 'uploaded-documents/'.str($companyData['name'])->slug().'/durc.pdf',
+                'status' => 'approved',
+                'has_expiry' => true,
+                'expiry_date' => now()->addDays(10),
+                'approved_at' => now(),
+            ]);
+        }
+
+        Artisan::call('documents:notify-deadlines', ['--special-only' => true]);
+
+        Http::assertSentCount(1);
+        Http::assertSent(function ($request): bool {
+            $text = (string) $request['text'];
+
+            return $request['chat_id'] === '-100456'
+                && str_contains($text, 'Societa Inclusa SRL')
+                && ! str_contains($text, 'Societa Esclusa SRL');
+        });
+
+        $this->assertDatabaseCount('document_deadline_notifications', 1);
+        $this->assertDatabaseHas('document_deadline_notifications', [
+            'channel' => 'telegram_special',
+            'bucket' => '15',
+        ]);
     }
 
     public function test_manual_credentials_mail_service_sends_mass_emails_from_json(): void

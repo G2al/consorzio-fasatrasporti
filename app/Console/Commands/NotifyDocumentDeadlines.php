@@ -19,17 +19,25 @@ class NotifyDocumentDeadlines extends Command
 {
     private const TELEGRAM_MESSAGE_SAFE_LIMIT = 3500;
 
-    protected $signature = 'documents:notify-deadlines {--dry-run : Mostra le scadenze senza inviare Telegram}';
+    protected $signature = 'documents:notify-deadlines
+        {--dry-run : Mostra le scadenze senza inviare Telegram}
+        {--special-only : Invia esclusivamente gli avvisi al gruppo Telegram speciale}';
 
     protected $description = 'Invia su Telegram gli avvisi per le scadenze dei documenti.';
 
     public function handle(DeadlineReminderMailService $deadlineReminderMailService): int
     {
         $items = $this->deadlineItems();
-        $telegramItems = $this->pendingDeadlineItems($items, 'telegram');
-        $emailItems = $this->pendingEmailDeadlineItems($items);
+        $specialOnly = (bool) $this->option('special-only');
+        $telegramItems = $specialOnly
+            ? collect()
+            : $this->pendingDeadlineItems($items, 'telegram');
+        $emailItems = $specialOnly
+            ? collect()
+            : $this->pendingEmailDeadlineItems($items);
+        $specialTelegramItems = $this->pendingSpecialTelegramItems($items);
 
-        if ($telegramItems->isEmpty() && $emailItems->isEmpty()) {
+        if ($telegramItems->isEmpty() && $emailItems->isEmpty() && $specialTelegramItems->isEmpty()) {
             $this->info('Nessuna scadenza da notificare.');
 
             return self::SUCCESS;
@@ -40,6 +48,10 @@ class NotifyDocumentDeadlines extends Command
             $telegramItems->each(fn (array $item) => $this->line($this->itemLine($item)));
 
             $this->newLine();
+            $this->line('[Telegram speciale] '.$specialTelegramItems->count().' scadenze da inviare');
+            $specialTelegramItems->each(fn (array $item) => $this->line($this->itemLine($item)));
+
+            $this->newLine();
             $this->line('[Email] '.$emailItems->count().' scadenze da inviare');
             $emailItems->each(fn (array $item) => $this->line($this->itemLine($item)));
 
@@ -47,6 +59,19 @@ class NotifyDocumentDeadlines extends Command
         }
 
         $now = now();
+        $specialTelegramFailed = false;
+
+        if ($specialTelegramItems->isNotEmpty()) {
+            foreach ($this->telegramMessages($specialTelegramItems) as $chunk) {
+                if (! $this->sendTelegramMessage($chunk['message'], special: true)) {
+                    $specialTelegramFailed = true;
+
+                    break;
+                }
+
+                $this->markAsSent($chunk['items'], 'telegram_special', $now);
+            }
+        }
 
         if ($telegramItems->isNotEmpty()) {
             foreach ($this->telegramMessages($telegramItems) as $chunk) {
@@ -85,11 +110,15 @@ class NotifyDocumentDeadlines extends Command
 
         $this->info('Notifiche Telegram inviate per '.$telegramItems->count().' scadenze.');
 
+        if ($specialTelegramItems->isNotEmpty() && ! $specialTelegramFailed) {
+            $this->info('Notifiche Telegram speciali inviate per '.$specialTelegramItems->count().' scadenze.');
+        }
+
         if ($emailItems->isNotEmpty()) {
             $this->info('Email scadenze inviate a '.$sentCompanies.' societa per '.$emailItems->count().' scadenze.');
         }
 
-        return $failedEmails > 0 ? self::FAILURE : self::SUCCESS;
+        return $failedEmails > 0 || $specialTelegramFailed ? self::FAILURE : self::SUCCESS;
     }
 
     private function deadlineItems(): Collection
@@ -136,6 +165,31 @@ class NotifyDocumentDeadlines extends Command
                     && $company instanceof User
                     && filled($company->email)
                     && filter_var($company->email, FILTER_VALIDATE_EMAIL);
+            })
+            ->values();
+    }
+
+    private function pendingSpecialTelegramItems(Collection $items): Collection
+    {
+        if (! (bool) config('services.telegram.special_expiry_enabled')) {
+            return collect();
+        }
+
+        $companyEmails = collect(explode(',', (string) config('services.telegram.special_expiry_company_emails')))
+            ->map(fn (string $email): string => strtolower(trim($email)))
+            ->filter()
+            ->unique();
+
+        if ($companyEmails->isEmpty()) {
+            return collect();
+        }
+
+        return $this->pendingDeadlineItems($items, 'telegram_special')
+            ->filter(function (array $item) use ($companyEmails): bool {
+                $company = $item['company_user'];
+
+                return $company instanceof User
+                    && $companyEmails->contains(strtolower(trim((string) $company->email)));
             })
             ->values();
     }
@@ -346,19 +400,22 @@ class NotifyDocumentDeadlines extends Command
         };
     }
 
-    private function sendTelegramMessage(string $message): bool
+    private function sendTelegramMessage(string $message, bool $special = false): bool
     {
-        if (! (bool) config('services.telegram.expiry_enabled')) {
-            $this->warn('Telegram scadenze disattivato.');
+        $configPrefix = $special ? 'special_expiry' : 'expiry';
+        $label = $special ? 'Telegram scadenze speciale' : 'Telegram scadenze';
+
+        if (! (bool) config("services.telegram.{$configPrefix}_enabled")) {
+            $this->warn($label.' disattivato.');
 
             return false;
         }
 
-        $token = (string) config('services.telegram.expiry_bot_token');
-        $chatId = (string) config('services.telegram.expiry_chat_id');
+        $token = (string) config("services.telegram.{$configPrefix}_bot_token");
+        $chatId = (string) config("services.telegram.{$configPrefix}_chat_id");
 
         if ($token === '' || $chatId === '') {
-            $this->warn('Token o chat ID Telegram scadenze mancanti.');
+            $this->warn('Token o chat ID '.$label.' mancanti.');
 
             return false;
         }
@@ -377,11 +434,11 @@ class NotifyDocumentDeadlines extends Command
 
             return true;
         } catch (Throwable $exception) {
-            Log::warning('Invio Telegram scadenze non riuscito.', [
+            Log::warning('Invio '.$label.' non riuscito.', [
                 'message' => $exception->getMessage(),
             ]);
 
-            $this->error('Invio Telegram fallito: '.$exception->getMessage());
+            $this->error('Invio '.$label.' fallito: '.$exception->getMessage());
 
             return false;
         }
